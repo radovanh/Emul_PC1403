@@ -26,10 +26,14 @@ class PC1403Display {
 
   _setupCanvas() {
     const dpr = window.devicePixelRatio || 1;
-    const w = this.canvas.clientWidth || 600;
-    const h = this.canvas.clientHeight || 80;
+    // Use a safe default if the element has no layout yet
+    const w = this.canvas.clientWidth || this.canvas.width || 400;
+    const h = 56;
     this.canvas.width  = w * dpr;
     this.canvas.height = h * dpr;
+    this.canvas.style.width  = w + 'px';
+    this.canvas.style.height = h + 'px';
+    this.ctx.setTransform(1,0,0,1,0,0);
     this.ctx.scale(dpr, dpr);
     this.W = w;
     this.H = h;

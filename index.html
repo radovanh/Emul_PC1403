@@ -84,7 +84,9 @@ body {
   background:#111; border-radius:7px; padding:8px; margin-bottom:14px;
   box-shadow:inset 0 2px 8px rgba(0,0,0,.9),0 0 0 1px rgba(0,0,0,.6);
 }
-.lcd-screen { background:#8bac0f; border-radius:4px; position:relative; overflow:hidden; }
+.lcd-screen { background:#8bac0f; border-radius:4px; position:relative; overflow:hidden; transition:background .4s, filter .4s; }
+.powered-off .lcd-screen { background:#5a7a10; filter:brightness(0.35); }
+.powered-off .indicators { opacity:0.15; }
 .lcd-screen::after {
   content:''; position:absolute; inset:0;
   background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.05) 3px,rgba(0,0,0,.05) 4px);
@@ -311,7 +313,7 @@ footer a:hover{color:#8bac0f}
 <div class="main-layout">
 
 <!-- ═══════════════ CALCULATOR ═══════════════ -->
-<div class="calculator">
+<div class="calculator" id="calcBody">
 
   <div class="brand-plate">
     <div class="brand-sharp">SHARP</div>
@@ -348,7 +350,7 @@ footer a:hover{color:#8bac0f}
 
     <!-- ROW 1: system + QWERTY top -->
     <div class="krow">
-      <button class="k k-sys k-sm" onclick="kp('OFF')"><span class="kl-main">OFF</span></button>
+      <button class="k k-sys k-sm" id="offBtn" onclick="kp('OFF')" title="Power ON/OFF"><span class="kl-main" id="offBtnLabel">ON</span><span class="kl-sub">OFF</span></button>
       <button class="k k-sys k-sm" onclick="kp('MODE')"><span class="kl-main">MODE</span></button>
       <button class="k k-sys k-sm" onclick="kp('DEF')"><span class="kl-main">DEF</span></button>
       <div class="kgap"></div>
@@ -566,34 +568,79 @@ footer a:hover{color:#8bac0f}
 let display, basic;
 let shiftOn = false;
 let lastAns = 0;
+let powered = false;
 
-// ── LCD setup ──
 const lcdCanvas = document.getElementById('lcd');
-function setupLcd() {
+
+// Properly resize LCD canvas after display exists
+function resizeLcd() {
+  if (!display) return;
   const dpr = window.devicePixelRatio || 1;
-  const w = lcdCanvas.parentElement.clientWidth;
-  lcdCanvas.width  = w * dpr;
-  lcdCanvas.height = 56 * dpr;
+  const w = Math.max(lcdCanvas.parentElement.clientWidth, 100);
   lcdCanvas.style.width  = w + 'px';
   lcdCanvas.style.height = '56px';
-  if (display) {
-    display.W = w; display.H = 56;
-    display.ctx.setTransform(1,0,0,1,0,0);
-    display.ctx.scale(dpr, dpr);
-    display.render();
-  }
+  lcdCanvas.width  = w * dpr;
+  lcdCanvas.height = 56 * dpr;
+  display.W   = w;
+  display.H   = 56;
+  display.ctx = lcdCanvas.getContext('2d');
+  display.ctx.setTransform(1,0,0,1,0,0);
+  display.ctx.scale(dpr, dpr);
+  display.render();
+}
+
+// Sync LCD to show what is typed in the terminal input
+function lcdSync() {
+  if (!display || !powered) return;
+  const val = document.getElementById('ti').value;
+  const txt = val.slice(-24);
+  display.showText(txt);
+  display.setCursor(txt.length < 24 ? txt.length : 23);
+}
+
+function powerOn() {
+  powered = true;
+  document.getElementById('offBtnLabel').textContent = 'OFF';
+  const dot = document.querySelector('.power-dot');
+  dot.style.background = '#8bac0f';
+  dot.style.boxShadow  = '0 0 8px #8bac0f';
+  dot.style.animation  = 'pwrPulse 3s ease-in-out infinite';
+  display.showText('SHARP PC-1403');
+  setTimeout(() => display.showText('BASIC 1.1'), 700);
+  setTimeout(() => {
+    display.showText('');
+    display.setCursor(0);
+    setAngle('DEG');
+    addOut('── SHARP PC-1403 READY ──', true, 'sys');
+    addOut('Type commands below or load a sample →', true, 'sys');
+  }, 1400);
+}
+
+function powerOff() {
+  powered = false;
+  document.getElementById('calcBody').classList.add('powered-off');
+  basic.stop();
+  display.showText('');
+  display.setCursor(-1);
+  const dot = document.querySelector('.power-dot');
+  dot.style.background  = '#1a2a08';
+  dot.style.boxShadow   = 'none';
+  dot.style.animation   = 'none';
+  document.getElementById('ti').value = '';
+  document.getElementById('offBtnLabel').textContent = 'ON';
+  addOut('── POWER OFF ──', true, 'sys');
 }
 
 window.addEventListener('load', () => {
-  setupLcd();
+  // Create display first with default size, then resize correctly
   display = new PC1403Display(lcdCanvas);
-  basic = new PC1403Basic(display, null);
+  basic   = new PC1403Basic(display, null);
   basic.onPrint = (txt, nl) => addOut(txt, nl, 'output');
   basic.onBeep  = beep;
   basic.onModeChange = updateModeInds;
 
-  display.showText('PC-1403 READY');
-  setTimeout(() => display.showText(''), 1800);
+  // Resize after layout is complete
+  setTimeout(() => { resizeLcd(); powerOn(); }, 80);
 
   document.addEventListener('keydown', onPhysKey);
 
@@ -602,14 +649,10 @@ window.addEventListener('load', () => {
     if (e.key === 'Enter') { e.preventDefault(); doEnter(); }
     if (e.key === 'Escape') stopProg();
   });
+  // Keep LCD synced as user types
+  ti.addEventListener('input', lcdSync);
 
-  window.addEventListener('resize', setupLcd);
-  setAngle('DEG');
-
-  setTimeout(() => {
-    addOut('Type BASIC commands, or tap a sample →', true, 'sys');
-    addOut('Try: PRINT SIN(30)  or load a sample', true, 'sys');
-  }, 700);
+  window.addEventListener('resize', () => { setTimeout(resizeLcd, 50); });
 });
 
 // ── Output ──
@@ -687,7 +730,8 @@ async function doEnter() {
   if (up === 'CLS' || up === 'CLEAR') { clearTerm(); return; }
   if (up === 'NEW')   { basic._initSystem(); addOut('OK', true, 'sys'); display.showText(''); return; }
   await basic.execute(cmd);
-  display.showText('');
+  lastAns = basic.variables && basic.variables['_ANS'] || lastAns;
+  lcdSync();
 }
 
 function onPhysKey(e) {
@@ -765,12 +809,15 @@ function kp(id) {
     'MPLUS':'M-','MR':'MC',
   };
 
+  // Block keys when powered off (except OFF itself)
+  if (!powered && id !== 'OFF') return;
+
   switch(id) {
     case 'ENTER':   doEnter(); return;
-    case 'BS':      f.value = f.value.slice(0,-1); break;
+    case 'BS':      f.value = f.value.slice(0,-1); lcdSync(); return;
     case 'INS':     return;
-    case 'CLS':     clearTerm(); return;
-    case 'OFF':     display.showText(''); display.clear(); return;
+    case 'CLS':     f.value = ''; lcdSync(); clearTerm(); return;
+    case 'OFF':     powered ? powerOff() : powerOn(); return;
     case 'MODE':    toggleMode(); return;
     case 'CAL':
       shifted ? runProg() : addOut('CAL mode', true, 'sys');
@@ -793,7 +840,7 @@ function kp(id) {
         display.showText('M='+basic._formatNum(basic.variables['M']));
         f.value = '';
       } catch(e){}
-      return;
+      lcdSync(); return;
     }
     case 'MR':
       if (shifted) { basic.variables['M']=0; document.getElementById('i-m').classList.remove('on'); display.showText('M=0'); }
@@ -801,7 +848,7 @@ function kp(id) {
       break;
     case 'ANS': f.value += String(lastAns); break;
     case 'STAT':
-      if (shifted) { basic._initSystem(); addOut('NEW', true, 'sys'); }
+      if (shifted) { basic._initSystem(); addOut('NEW', true, 'sys'); display.showText(''); }
       else runProg();
       return;
     case 'CUR_L': { const p=f.selectionStart; if(p>0) f.setSelectionRange(p-1,p-1); f.focus(); return; }
@@ -819,7 +866,8 @@ function kp(id) {
     }
   }
 
-  if (f.value && !basic.running) display.showText(f.value.slice(-24));
+  // Always sync LCD after any key modifies the input
+  lcdSync();
   f.focus();
 }
 
