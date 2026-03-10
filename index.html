@@ -3,732 +3,872 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<meta name="theme-color" content="#1a1a2e">
+<meta name="theme-color" content="#1c1c1c">
 <meta name="description" content="Sharp PC-1403 Pocket Computer Emulator">
 <title>Sharp PC-1403 Emulator</title>
 <link rel="manifest" href="manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="PC-1403">
-<meta name="mobile-web-app-capable" content="yes">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=VT323&display=swap" rel="stylesheet">
-
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@700;900&family=VT323&display=swap" rel="stylesheet">
 <style>
-/* ─────────────────────────── RESET & BASE ─────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { height: 100%; }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%}
 
 body {
-  min-height: 100%;
-  background: #0d1117;
-  background-image: 
-    radial-gradient(ellipse at 20% 50%, rgba(26,58,26,0.3) 0%, transparent 60%),
-    radial-gradient(ellipse at 80% 20%, rgba(20,40,80,0.3) 0%, transparent 60%);
-  font-family: 'Share Tech Mono', monospace;
-  color: #c9d1d9;
+  background: #181818;
+  background-image: radial-gradient(ellipse at 50% 0%, #242424 0%, #111 100%);
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 20px 16px 40px;
-  overflow-x: hidden;
+  padding: 20px 10px 40px;
+  font-family: 'Share Tech Mono', monospace;
+  color: #aaa;
 }
 
-/* ─────────────────────────── HEADER ─────────────────────────── */
-.page-header {
-  text-align: center;
-  margin-bottom: 24px;
-}
-
+/* PAGE HEADER */
+.page-header { text-align:center; margin-bottom:18px; }
 .page-title {
   font-family: 'Orbitron', sans-serif;
   font-weight: 900;
-  font-size: clamp(18px, 4vw, 32px);
+  font-size: clamp(16px, 3.5vw, 28px);
   color: #8bac0f;
-  text-shadow: 0 0 20px rgba(139,172,15,0.5), 0 0 40px rgba(139,172,15,0.2);
-  letter-spacing: 4px;
-  text-transform: uppercase;
+  letter-spacing: 5px;
+  text-shadow: 0 0 16px rgba(139,172,15,0.5);
 }
+.page-sub { font-size:11px; color:#444; letter-spacing:3px; margin-top:4px; }
 
-.page-subtitle {
-  font-family: 'VT323', monospace;
-  font-size: clamp(14px, 2.5vw, 18px);
-  color: #4a5568;
-  letter-spacing: 2px;
-  margin-top: 4px;
-}
-
-/* ─────────────────────────── MAIN LAYOUT ─────────────────────────── */
-.emulator-wrapper {
+/* MAIN LAYOUT */
+.main-layout {
   display: flex;
   gap: 20px;
-  width: 100%;
-  max-width: 1100px;
   align-items: flex-start;
-}
-
-@media (max-width: 768px) {
-  .emulator-wrapper { flex-direction: column; }
-}
-
-/* ─────────────────────────── CALCULATOR BODY ─────────────────────────── */
-.calculator {
-  background: linear-gradient(165deg, #2d2d2d 0%, #1a1a1a 60%, #222 100%);
-  border-radius: 16px 16px 30px 30px;
-  padding: 16px 16px 24px;
-  box-shadow:
-    0 0 0 1px rgba(255,255,255,0.08),
-    0 4px 12px rgba(0,0,0,0.6),
-    0 20px 60px rgba(0,0,0,0.8),
-    inset 0 1px 0 rgba(255,255,255,0.12),
-    inset 0 -2px 0 rgba(0,0,0,0.4);
-  width: 320px;
-  min-width: 300px;
-  flex-shrink: 0;
-}
-
-/* Top brand strip */
-.brand-strip {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 4px 12px;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
-  margin-bottom: 12px;
-}
-
-.brand-name {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 11px;
-  font-weight: 700;
-  color: #8bac0f;
-  letter-spacing: 3px;
-  text-shadow: 0 0 8px rgba(139,172,15,0.4);
-}
-
-.model-name {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 10px;
-  color: #666;
-  letter-spacing: 2px;
-}
-
-.power-indicator {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #8bac0f;
-  box-shadow: 0 0 8px rgba(139,172,15,0.8);
-  animation: powerPulse 3s ease-in-out infinite;
-}
-
-@keyframes powerPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-/* ─────────────────────────── LCD SCREEN ─────────────────────────── */
-.screen-bezel {
-  background: linear-gradient(180deg, #111 0%, #1a1a1a 100%);
-  border-radius: 8px;
-  padding: 10px;
-  margin-bottom: 14px;
-  box-shadow:
-    inset 0 2px 6px rgba(0,0,0,0.8),
-    inset 0 -1px 3px rgba(255,255,255,0.04),
-    0 0 0 1px rgba(0,0,0,0.5);
-}
-
-.screen-inner {
-  position: relative;
-  background: #8bac0f;
-  border-radius: 4px;
-  overflow: hidden;
-  box-shadow: inset 0 0 20px rgba(0,0,0,0.3);
-}
-
-/* LCD scanline overlay */
-.screen-inner::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(0,0,0,0.03) 2px,
-    rgba(0,0,0,0.03) 4px
-  );
-  pointer-events: none;
-  z-index: 10;
-}
-
-#lcd-canvas {
-  display: block;
   width: 100%;
-  height: 70px;
+  max-width: 1060px;
 }
 
-/* ─────────────────────────── STATUS BAR ─────────────────────────── */
-.status-bar {
-  display: flex;
-  gap: 8px;
-  padding: 4px 6px;
-  background: rgba(0,0,0,0.2);
-  border-radius: 4px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-}
-
-.status-ind {
-  font-family: 'VT323', monospace;
-  font-size: 12px;
-  color: #306230;
-  padding: 1px 5px;
-  border-radius: 3px;
-  transition: all 0.1s;
-  cursor: pointer;
-  user-select: none;
-}
-
-.status-ind.active {
-  color: #8bac0f;
-  background: rgba(139,172,15,0.15);
-  text-shadow: 0 0 4px rgba(139,172,15,0.6);
-}
-
-/* ─────────────────────────── KEYBOARD ─────────────────────────── */
-.keyboard {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.key-row {
-  display: flex;
-  gap: 5px;
-  justify-content: center;
-}
-
-.key {
-  position: relative;
-  width: 52px;
-  height: 40px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 11px;
-  letter-spacing: 0.5px;
-  transition: all 0.08s ease;
-  outline: none;
-  -webkit-tap-highlight-color: transparent;
-  user-select: none;
-  overflow: hidden;
-}
-
-.key::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 6px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.12) 0%, transparent 50%);
-  pointer-events: none;
-}
-
-.key:active, .key.pressed {
-  transform: translateY(2px);
-  box-shadow: none !important;
-}
-
-.key-main {
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1;
-}
-
-.key-sub {
-  font-size: 8px;
-  line-height: 1;
-  opacity: 0.7;
-  margin-top: 2px;
-}
-
-.shifted .key-sub { opacity: 1; color: #ffd700; }
-
-/* Key types */
-.key-num {
-  background: linear-gradient(180deg, #3d3d3d 0%, #2d2d2d 100%);
-  color: #e0e0e0;
-  box-shadow: 0 3px 0 #111, 0 4px 6px rgba(0,0,0,0.4);
-}
-
-.key-op {
-  background: linear-gradient(180deg, #4a3520 0%, #3a2510 100%);
-  color: #f0a040;
-  box-shadow: 0 3px 0 #1a0d00, 0 4px 6px rgba(0,0,0,0.4);
-}
-
-.key-func {
-  background: linear-gradient(180deg, #1a3520 0%, #0f2510 100%);
-  color: #6db36d;
-  box-shadow: 0 3px 0 #071307, 0 4px 6px rgba(0,0,0,0.4);
-  font-size: 10px;
-}
-
-.key-sys {
-  background: linear-gradient(180deg, #2a1a3a 0%, #1a0f2a 100%);
-  color: #9b7bd4;
-  box-shadow: 0 3px 0 #0d0018, 0 4px 6px rgba(0,0,0,0.4);
-}
-
-.key-shift {
-  background: linear-gradient(180deg, #3a3010 0%, #2a2000 100%);
-  color: #ffd700;
-  box-shadow: 0 3px 0 #100e00, 0 4px 6px rgba(0,0,0,0.4);
-}
-
-.key-edit {
-  background: linear-gradient(180deg, #2a2535 0%, #1a1525 100%);
-  color: #a090c0;
-  box-shadow: 0 3px 0 #0a0a15, 0 4px 6px rgba(0,0,0,0.4);
-}
-
-.key-enter {
-  background: linear-gradient(180deg, #1a3030 0%, #0f2020 100%);
-  color: #40d0d0;
-  box-shadow: 0 3px 0 #001515, 0 4px 6px rgba(0,0,0,0.4);
-}
-
-.key-shift.active {
-  background: linear-gradient(180deg, #605030 0%, #504020 100%);
-  box-shadow: 0 0 8px rgba(255,215,0,0.4), 0 3px 0 #1a1500;
-}
-
-/* ─────────────────────────── TERMINAL PANEL ─────────────────────────── */
-.terminal-panel {
-  flex: 1;
-  min-width: 0;
-}
-
-.terminal {
-  background: #0d1117;
-  border: 1px solid rgba(139,172,15,0.2);
-  border-radius: 12px;
-  overflow: hidden;
+/* CALCULATOR SHELL */
+.calculator {
+  background: linear-gradient(170deg, #333 0%, #1e1e1e 40%, #252525 100%);
+  border-radius: 14px 14px 22px 22px;
+  padding: 14px 14px 20px;
   box-shadow:
-    0 0 0 1px rgba(139,172,15,0.05),
-    0 4px 20px rgba(0,0,0,0.5);
-}
-
-.terminal-header {
-  background: #161b22;
-  padding: 8px 16px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid rgba(139,172,15,0.15);
-}
-
-.terminal-title {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 10px;
-  color: #8bac0f;
-  letter-spacing: 2px;
-}
-
-.terminal-dots {
-  display: flex;
-  gap: 6px;
-}
-
-.terminal-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-
-.dot-red   { background: #ff5f57; }
-.dot-yellow{ background: #febc2e; }
-.dot-green { background: #28c840; }
-
-.terminal-output {
-  height: 260px;
-  overflow-y: auto;
-  padding: 12px 16px;
-  font-family: 'VT323', monospace;
-  font-size: 16px;
-  line-height: 1.5;
-  color: #8bac0f;
-  scroll-behavior: smooth;
-}
-
-.terminal-output::-webkit-scrollbar { width: 4px; }
-.terminal-output::-webkit-scrollbar-track { background: transparent; }
-.terminal-output::-webkit-scrollbar-thumb { background: rgba(139,172,15,0.3); border-radius: 2px; }
-
-.output-line {
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-.output-line.error { color: #ff6b6b; }
-.output-line.system { color: #6b9bd2; }
-.output-line.input-echo { color: #a0c0ff; }
-
-/* Typing cursor */
-.output-cursor {
-  display: inline-block;
-  width: 8px;
-  height: 14px;
-  background: #8bac0f;
-  vertical-align: text-bottom;
-  animation: blink 1s step-end infinite;
-}
-
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
-}
-
-.terminal-input-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-top: 1px solid rgba(139,172,15,0.15);
-  background: #0d1117;
-}
-
-.terminal-prompt {
-  color: #8bac0f;
-  font-family: 'VT323', monospace;
-  font-size: 18px;
-  white-space: nowrap;
+    0 0 0 1px rgba(255,255,255,0.07),
+    0 2px 8px rgba(0,0,0,0.5),
+    0 12px 40px rgba(0,0,0,0.8),
+    inset 0 1px 0 rgba(255,255,255,0.1);
+  width: 580px;
   flex-shrink: 0;
 }
 
-#terminal-input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: #8bac0f;
-  font-family: 'VT323', monospace;
-  font-size: 18px;
-  caret-color: #8bac0f;
-  min-width: 0;
+/* BRAND PLATE */
+.brand-plate {
+  display:flex; justify-content:space-between; align-items:flex-end;
+  padding:0 2px 10px;
+}
+.brand-sharp {
+  font-family:'Orbitron',sans-serif; font-weight:900; font-size:13px;
+  letter-spacing:5px; color:#8bac0f;
+  text-shadow:0 0 8px rgba(139,172,15,0.5);
+}
+.brand-model { font-family:'Orbitron',sans-serif; font-size:10px; color:#555; letter-spacing:2px; }
+.power-dot {
+  width:7px; height:7px; border-radius:50%;
+  background:#8bac0f; box-shadow:0 0 8px #8bac0f;
+  animation:pwrPulse 3s ease-in-out infinite;
+}
+@keyframes pwrPulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* LCD */
+.lcd-bezel {
+  background:#111; border-radius:7px; padding:8px; margin-bottom:14px;
+  box-shadow:inset 0 2px 8px rgba(0,0,0,.9),0 0 0 1px rgba(0,0,0,.6);
+}
+.lcd-screen { background:#8bac0f; border-radius:4px; position:relative; overflow:hidden; }
+.lcd-screen::after {
+  content:''; position:absolute; inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.05) 3px,rgba(0,0,0,.05) 4px);
+  pointer-events:none; z-index:2;
+}
+#lcd { display:block; width:100%; height:56px; }
+
+/* INDICATORS */
+.indicators {
+  display:flex; gap:6px; padding:3px 4px 8px;
+  font-family:'VT323',monospace; font-size:11px;
+}
+.ind {
+  color:#2a4a0f; padding:1px 4px; border-radius:3px;
+  cursor:pointer; user-select:none; transition:color .1s,background .1s;
+}
+.ind.on {
+  color:#8bac0f; background:rgba(139,172,15,.12);
+  text-shadow:0 0 4px rgba(139,172,15,.6);
+}
+.ind-r { margin-left:auto; }
+
+/* KEYBOARD WRAP */
+.keyboard-wrap { display:flex; flex-direction:column; gap:5px; }
+.krow { display:flex; gap:4px; align-items:stretch; }
+.kgap { flex:0 0 8px; }
+
+/* KEY BASE */
+.k {
+  position:relative; flex:1; min-width:0; height:36px;
+  border:none; border-radius:5px; cursor:pointer;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  font-family:'Share Tech Mono',monospace; line-height:1;
+  transition:filter .08s,transform .06s;
+  outline:none; -webkit-tap-highlight-color:transparent; user-select:none; padding:0 2px;
+}
+.k::before {
+  content:''; position:absolute; inset:0; border-radius:5px;
+  background:linear-gradient(180deg,rgba(255,255,255,.13) 0%,transparent 55%);
+  pointer-events:none;
+}
+.k:active,.k.pressed { transform:translateY(2px); filter:brightness(.75); }
+
+/* Label layers */
+.kl-main { font-size:11px; font-weight:600; color:#e8e8e8; }
+.kl-sub  { font-size:7px; color:#ffd700; opacity:0; margin-top:2px; transition:opacity .15s; }
+.keyboard-wrap.shifted .kl-sub { opacity:1; }
+
+/* KEY COLOR VARIANTS */
+.k-alpha {
+  background:linear-gradient(180deg,#4a4a4a 0%,#353535 100%);
+  box-shadow:0 3px 0 #1a1a1a,0 4px 6px rgba(0,0,0,.4);
+}
+.k-num {
+  background:linear-gradient(180deg,#3d3d3d 0%,#2a2a2a 100%);
+  box-shadow:0 3px 0 #111,0 4px 6px rgba(0,0,0,.4);
+}
+.k-op {
+  background:linear-gradient(180deg,#c85a00 0%,#a04500 100%);
+  box-shadow:0 3px 0 #5a2000,0 4px 6px rgba(0,0,0,.4);
+}
+.k-op .kl-main { color:#fff; font-size:14px; }
+.k-fn {
+  background:linear-gradient(180deg,#1a4520 0%,#112d14 100%);
+  box-shadow:0 3px 0 #061009,0 4px 6px rgba(0,0,0,.4);
+}
+.k-fn .kl-main { color:#6ecf6e; font-size:9.5px; }
+.k-shift {
+  background:linear-gradient(180deg,#6a5a10 0%,#4a3a05 100%);
+  box-shadow:0 3px 0 #1a1200,0 4px 6px rgba(0,0,0,.4);
+}
+.k-shift .kl-main { color:#ffd700; font-size:9.5px; }
+.k-shift.on {
+  background:linear-gradient(180deg,#a09020 0%,#705500 100%);
+  box-shadow:0 0 10px rgba(255,215,0,.4),0 3px 0 #221a00;
+}
+.k-sys {
+  background:linear-gradient(180deg,#2a2545 0%,#1a1530 100%);
+  box-shadow:0 3px 0 #0d0a20,0 4px 6px rgba(0,0,0,.4);
+}
+.k-sys .kl-main { color:#9b7bd4; font-size:9px; }
+.k-del {
+  background:linear-gradient(180deg,#4a1515 0%,#330d0d 100%);
+  box-shadow:0 3px 0 #1a0505,0 4px 6px rgba(0,0,0,.4);
+}
+.k-del .kl-main { color:#ff7070; font-size:9.5px; }
+.k-ent {
+  background:linear-gradient(180deg,#0f3535 0%,#082525 100%);
+  box-shadow:0 3px 0 #030f0f,0 4px 6px rgba(0,0,0,.4);
+}
+.k-ent .kl-main { color:#40d0d0; font-size:10px; }
+
+/* Fixed size keys */
+.k-sm { flex:0 0 42px; }
+.k-md { flex:0 0 50px; }
+.k-lg { flex:0 0 68px; }
+.k-xl { flex:0 0 80px; }
+
+/* Divider */
+.kdiv {
+  height:4px;
+  background:linear-gradient(90deg,transparent,rgba(139,172,15,.12),transparent);
+  border-radius:2px; margin:2px 0;
 }
 
-#terminal-input::placeholder { color: rgba(139,172,15,0.3); }
-
-.btn-run {
-  background: rgba(139,172,15,0.15);
-  border: 1px solid rgba(139,172,15,0.3);
-  color: #8bac0f;
-  padding: 4px 12px;
-  border-radius: 6px;
-  font-family: 'Orbitron', sans-serif;
-  font-size: 10px;
-  letter-spacing: 1px;
-  cursor: pointer;
-  transition: all 0.2s;
-  flex-shrink: 0;
+/* TERMINAL PANEL */
+.terminal-panel { flex:1; min-width:0; display:flex; flex-direction:column; gap:10px; }
+.terminal {
+  background:#0d1117; border:1px solid rgba(139,172,15,.2);
+  border-radius:10px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,.5);
 }
-
-.btn-run:hover {
-  background: rgba(139,172,15,0.3);
-  box-shadow: 0 0 10px rgba(139,172,15,0.2);
+.t-header {
+  background:#161b22; padding:7px 14px;
+  display:flex; justify-content:space-between; align-items:center;
+  border-bottom:1px solid rgba(139,172,15,.12);
 }
+.t-title { font-family:'Orbitron',sans-serif; font-size:9px; color:#8bac0f; letter-spacing:2px; }
+.t-dots { display:flex; gap:5px; }
+.t-dot { width:10px; height:10px; border-radius:50%; cursor:pointer; }
+.dot-r{background:#ff5f57}.dot-y{background:#febc2e}.dot-g{background:#28c840}
 
-/* ─────────────────────────── QUICK HELP ─────────────────────────── */
-.help-panel {
-  margin-top: 16px;
-  background: #161b22;
-  border: 1px solid rgba(139,172,15,0.12);
-  border-radius: 10px;
-  overflow: hidden;
+.t-out {
+  height:220px; overflow-y:auto; padding:10px 14px;
+  font-family:'VT323',monospace; font-size:15px; line-height:1.5; color:#8bac0f;
 }
+.t-out::-webkit-scrollbar{width:4px}
+.t-out::-webkit-scrollbar-thumb{background:rgba(139,172,15,.3);border-radius:2px}
+.oline{white-space:pre-wrap;word-break:break-all}
+.oline.err{color:#ff7070}.oline.sys{color:#6b9bd2}.oline.echo{color:#a0c0ff}
 
-.help-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 14px;
-  border-bottom: 1px solid rgba(139,172,15,0.1);
-  cursor: pointer;
-  user-select: none;
+.t-in-row {
+  display:flex; align-items:center; gap:6px;
+  padding:6px 14px; border-top:1px solid rgba(139,172,15,.12); background:#0d1117;
 }
-
-.help-title {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 10px;
-  color: #6b7280;
-  letter-spacing: 1px;
+.t-prompt { font-family:'VT323',monospace; font-size:17px; color:#8bac0f; white-space:nowrap; flex-shrink:0; }
+#ti {
+  flex:1; background:transparent; border:none; outline:none;
+  color:#8bac0f; font-family:'VT323',monospace; font-size:17px;
+  caret-color:#8bac0f; min-width:0;
 }
-
-.help-toggle { color: #4a5568; font-size: 12px; transition: transform 0.2s; }
-.help-toggle.open { transform: rotate(180deg); }
-
-.help-content {
-  display: none;
-  padding: 12px 14px;
-  font-size: 12px;
-  color: #6b7280;
-  line-height: 1.8;
-  column-count: 2;
-  column-gap: 16px;
+#ti::placeholder{color:rgba(139,172,15,.3)}
+.btn-ent {
+  background:rgba(139,172,15,.12); border:1px solid rgba(139,172,15,.3);
+  color:#8bac0f; padding:3px 10px; border-radius:6px;
+  font-family:'Orbitron',sans-serif; font-size:9px; letter-spacing:1px;
+  cursor:pointer; flex-shrink:0;
 }
+.btn-ent:hover{background:rgba(139,172,15,.25)}
 
-.help-content.visible { display: block; }
-.help-content b { color: #8bac0f; }
-
-/* ─────────────────────────── PROGRAM SAMPLES ─────────────────────────── */
-.samples-row {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-  flex-wrap: wrap;
+.run-badge {
+  display:none; align-items:center; gap:5px; padding:2px 8px;
+  background:rgba(139,172,15,.1); border:1px solid rgba(139,172,15,.3);
+  border-radius:10px; font-size:10px; color:#8bac0f;
 }
+.run-badge.on{display:flex}
+.run-dot{width:5px;height:5px;border-radius:50%;background:#8bac0f;animation:rp .8s ease-in-out infinite}
+@keyframes rp{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.6)}}
 
-.sample-btn {
-  background: rgba(26,58,26,0.4);
-  border: 1px solid rgba(139,172,15,0.2);
-  color: #6db36d;
-  padding: 5px 12px;
-  border-radius: 20px;
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.2s;
-  letter-spacing: 0.5px;
+.samples { display:flex; flex-wrap:wrap; gap:6px; }
+.sbtn {
+  background:rgba(26,58,26,.4); border:1px solid rgba(139,172,15,.2);
+  color:#6db36d; padding:4px 12px; border-radius:20px;
+  font-family:'Share Tech Mono',monospace; font-size:11px; cursor:pointer; transition:all .2s;
 }
+.sbtn:hover{background:rgba(139,172,15,.15);color:#8bac0f;border-color:rgba(139,172,15,.4)}
 
-.sample-btn:hover {
-  background: rgba(139,172,15,0.15);
-  color: #8bac0f;
-  border-color: rgba(139,172,15,0.4);
+.help { background:#161b22; border:1px solid rgba(139,172,15,.1); border-radius:8px; overflow:hidden; }
+.help-hdr {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:7px 12px; cursor:pointer;
 }
-
-/* ─────────────────────────── RUNNING INDICATOR ─────────────────────────── */
-.running-badge {
-  display: none;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 10px;
-  background: rgba(139,172,15,0.1);
-  border: 1px solid rgba(139,172,15,0.3);
-  border-radius: 12px;
-  font-size: 11px;
-  color: #8bac0f;
+.help-ttl{font-family:'Orbitron',sans-serif;font-size:9px;color:#555;letter-spacing:1px}
+.help-arr{color:#444;font-size:11px;transition:transform .2s}
+.help-arr.open{transform:rotate(180deg)}
+.help-body {
+  display:none; padding:10px 12px;
+  font-size:11px; color:#555; line-height:1.9;
+  column-count:2; column-gap:14px;
+  border-top:1px solid rgba(139,172,15,.08);
 }
+.help-body.vis{display:block}
+.help-body b{color:#8bac0f}
 
-.running-badge.visible { display: flex; }
+footer { margin-top:28px; text-align:center; font-size:10px; color:#333; line-height:1.9; }
+footer a{color:#444;text-decoration:none}
+footer a:hover{color:#8bac0f}
 
-.running-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #8bac0f;
-  animation: runPulse 0.8s ease-in-out infinite;
+/* RESPONSIVE */
+@media(max-width:880px){
+  .main-layout{flex-direction:column;align-items:center}
+  .terminal-panel{width:100%;max-width:580px}
 }
-
-@keyframes runPulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(0.7); }
+@media(max-width:620px){
+  .calculator{width:100%;min-width:0}
+  .k{height:31px}
+  .k .kl-main{font-size:10px}
+  .k-fn .kl-main{font-size:8.5px}
+  .k-sys .kl-main{font-size:8px}
+  .krow{gap:3px}
+  .keyboard-wrap{gap:4px}
+  .k-sm{flex:0 0 36px}
+  .k-md{flex:0 0 43px}
+  .k-lg{flex:0 0 56px}
+  .k-xl{flex:0 0 64px}
 }
-
-/* ─────────────────────────── FOOTER ─────────────────────────── */
-.page-footer {
-  margin-top: 32px;
-  text-align: center;
-  font-size: 11px;
-  color: #374151;
-  line-height: 1.8;
-}
-
-.page-footer a { color: #4a5568; text-decoration: none; }
-.page-footer a:hover { color: #8bac0f; }
-
-/* ─────────────────────────── RESPONSIVE ─────────────────────────── */
-@media (max-width: 480px) {
-  body { padding: 12px 8px 30px; }
-  
-  .calculator { width: 100%; min-width: 0; }
-  
-  .key { width: 46px; height: 38px; font-size: 10px; }
-  .key-main { font-size: 11px; }
-  .key-sub { font-size: 7.5px; }
-  
-  .key-row { gap: 4px; }
-  .keyboard { gap: 4px; }
-  
-  .terminal-output { height: 200px; }
-  
-  .help-content { column-count: 1; }
-}
-
-@media (max-width: 360px) {
-  .key { width: 40px; height: 35px; }
-  .key-main { font-size: 10px; }
+@media(max-width:400px){
+  .k{height:28px}
+  .k .kl-main{font-size:9px}
+  .k-fn .kl-main{font-size:7.5px}
+  .krow{gap:2px}
+  .keyboard-wrap{gap:3px}
+  .k-sm{flex:0 0 30px}
+  .k-md{flex:0 0 36px}
 }
 </style>
 </head>
 <body>
 
 <header class="page-header">
-  <h1 class="page-title">Sharp PC-1403</h1>
-  <div class="page-subtitle">Pocket Computer Emulator · Web Edition</div>
+  <div class="page-title">SHARP PC-1403</div>
+  <div class="page-sub">Pocket Computer Emulator</div>
 </header>
 
-<div class="emulator-wrapper">
+<div class="main-layout">
 
-  <!-- ── CALCULATOR BODY ── -->
-  <div class="calculator" id="calculator">
-    <div class="brand-strip">
-      <div class="brand-name">SHARP</div>
-      <div class="power-indicator" id="power-led"></div>
-      <div class="model-name">PC-1403</div>
-    </div>
-    
-    <div class="screen-bezel">
-      <div class="screen-inner">
-        <canvas id="lcd-canvas"></canvas>
-      </div>
-    </div>
-    
-    <div class="status-bar">
-      <span class="status-ind" id="ind-deg" onclick="toggleAngle('DEG')">DEG</span>
-      <span class="status-ind" id="ind-rad" onclick="toggleAngle('RAD')">RAD</span>
-      <span class="status-ind" id="ind-gra" onclick="toggleAngle('GRA')">GRA</span>
-      <span class="status-ind" id="ind-shift">SHIFT</span>
-      <span class="status-ind" id="ind-hyp">HYP</span>
-      <span class="status-ind" id="ind-m">M</span>
-      <span class="status-ind" id="ind-run" style="margin-left:auto">RUN</span>
-      <span class="status-ind" id="ind-pro">PRO</span>
-    </div>
-    
-    <div id="keyboard-container"></div>
+<!-- ═══════════════ CALCULATOR ═══════════════ -->
+<div class="calculator">
+
+  <div class="brand-plate">
+    <div class="brand-sharp">SHARP</div>
+    <div class="power-dot"></div>
+    <div class="brand-model">PC-1403</div>
   </div>
 
-  <!-- ── TERMINAL PANEL ── -->
-  <div class="terminal-panel">
-    <div class="terminal">
-      <div class="terminal-header">
-        <div class="terminal-title">TERMINAL OUTPUT</div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <div class="running-badge" id="running-badge">
-            <div class="running-dot"></div>
-            RUNNING
-          </div>
-          <div class="terminal-dots">
-            <div class="terminal-dot dot-red"    onclick="clearTerminal()" title="Clear" style="cursor:pointer"></div>
-            <div class="terminal-dot dot-yellow" onclick="stopProgram()"   title="Stop"  style="cursor:pointer"></div>
-            <div class="terminal-dot dot-green"  onclick="runProgram()"    title="Run"   style="cursor:pointer"></div>
-          </div>
+  <!-- LCD Screen -->
+  <div class="lcd-bezel">
+    <div class="lcd-screen">
+      <canvas id="lcd"></canvas>
+    </div>
+  </div>
+
+  <!-- Status indicators -->
+  <div class="indicators">
+    <span class="ind" id="i-deg" onclick="setAngle('DEG')">DEG</span>
+    <span class="ind" id="i-rad" onclick="setAngle('RAD')">RAD</span>
+    <span class="ind" id="i-gra" onclick="setAngle('GRA')">GRA</span>
+    <span class="ind" id="i-shf">SHIFT</span>
+    <span class="ind" id="i-hyp">HYP</span>
+    <span class="ind" id="i-m">M</span>
+    <span class="ind ind-r" id="i-run">RUN</span>
+    <span class="ind" id="i-pro">PRO</span>
+    <span class="ind" id="i-e">E</span>
+  </div>
+
+  <!-- ═══ KEYBOARD ═══
+    Matches real PC-1403 layout:
+    Top area:  system keys + full QWERTY
+    Bottom area: scientific functions + numeric pad
+  -->
+  <div class="keyboard-wrap" id="kb">
+
+    <!-- ROW 1: system + QWERTY top -->
+    <div class="krow">
+      <button class="k k-sys k-sm" onclick="kp('OFF')"><span class="kl-main">OFF</span></button>
+      <button class="k k-sys k-sm" onclick="kp('MODE')"><span class="kl-main">MODE</span></button>
+      <button class="k k-sys k-sm" onclick="kp('DEF')"><span class="kl-main">DEF</span></button>
+      <div class="kgap"></div>
+      <button class="k k-alpha" onclick="kp('Q')"><span class="kl-main">Q</span></button>
+      <button class="k k-alpha" onclick="kp('W')"><span class="kl-main">W</span></button>
+      <button class="k k-alpha" onclick="kp('E')"><span class="kl-main">E</span></button>
+      <button class="k k-alpha" onclick="kp('R')"><span class="kl-main">R</span></button>
+      <button class="k k-alpha" onclick="kp('T')"><span class="kl-main">T</span></button>
+      <button class="k k-alpha" onclick="kp('Y')"><span class="kl-main">Y</span></button>
+      <button class="k k-alpha" onclick="kp('U')"><span class="kl-main">U</span></button>
+      <button class="k k-alpha" onclick="kp('I')"><span class="kl-main">I</span></button>
+      <button class="k k-alpha" onclick="kp('O')"><span class="kl-main">O</span></button>
+      <div class="kgap"></div>
+      <button class="k k-del k-sm" onclick="kp('BS')"><span class="kl-main">BS</span><span class="kl-sub">DEL</span></button>
+      <button class="k k-del k-sm" onclick="kp('INS')"><span class="kl-main">INS</span></button>
+    </div>
+
+    <!-- ROW 2: SHIFT/CAL + QWERTY middle + ENTER -->
+    <div class="krow">
+      <button class="k k-shift k-sm" id="shiftBtn" onclick="kp('SHIFT')"><span class="kl-main">SHIFT</span></button>
+      <button class="k k-sys k-sm" onclick="kp('CAL')"><span class="kl-main">CAL</span><span class="kl-sub">RUN</span></button>
+      <button class="k k-alpha k-sm" onclick="kp('SPC')"><span class="kl-main">SPC</span></button>
+      <div class="kgap"></div>
+      <button class="k k-alpha" onclick="kp('A')"><span class="kl-main">A</span></button>
+      <button class="k k-alpha" onclick="kp('S')"><span class="kl-main">S</span></button>
+      <button class="k k-alpha" onclick="kp('D')"><span class="kl-main">D</span></button>
+      <button class="k k-alpha" onclick="kp('F')"><span class="kl-main">F</span></button>
+      <button class="k k-alpha" onclick="kp('G')"><span class="kl-main">G</span></button>
+      <button class="k k-alpha" onclick="kp('H')"><span class="kl-main">H</span></button>
+      <button class="k k-alpha" onclick="kp('J')"><span class="kl-main">J</span></button>
+      <button class="k k-alpha" onclick="kp('K')"><span class="kl-main">K</span></button>
+      <button class="k k-alpha" onclick="kp('L')"><span class="kl-main">L</span></button>
+      <div class="kgap"></div>
+      <button class="k k-ent k-lg" onclick="kp('ENTER')"><span class="kl-main">ENTER</span></button>
+    </div>
+
+    <!-- ROW 3: QWERTY bottom + CLS -->
+    <div class="krow">
+      <!-- left filler matching 3 system keys width -->
+      <div style="flex:0 0 114px"></div>
+      <div class="kgap"></div>
+      <button class="k k-alpha" onclick="kp('Z')"><span class="kl-main">Z</span></button>
+      <button class="k k-alpha" onclick="kp('X')"><span class="kl-main">X</span></button>
+      <button class="k k-alpha" onclick="kp('C')"><span class="kl-main">C</span></button>
+      <button class="k k-alpha" onclick="kp('V')"><span class="kl-main">V</span></button>
+      <button class="k k-alpha" onclick="kp('B')"><span class="kl-main">B</span></button>
+      <button class="k k-alpha" onclick="kp('N')"><span class="kl-main">N</span></button>
+      <button class="k k-alpha" onclick="kp('M')"><span class="kl-main">M</span></button>
+      <button class="k k-alpha" onclick="kp('COMMA')"><span class="kl-main">,</span></button>
+      <button class="k k-alpha" onclick="kp('SEMI')"><span class="kl-main">;</span><span class="kl-sub">:</span></button>
+      <div class="kgap"></div>
+      <button class="k k-alpha k-sm" onclick="kp('QUOT')"><span class="kl-main">"</span></button>
+      <button class="k k-del k-sm" onclick="kp('CLS')"><span class="kl-main">CLS</span></button>
+    </div>
+
+    <div class="kdiv"></div>
+
+    <!-- ROW 4: Scientific functions + ( ) M+ MR -->
+    <div class="krow">
+      <button class="k k-fn" onclick="kp('SIN')"><span class="kl-main">SIN</span><span class="kl-sub">ASN</span></button>
+      <button class="k k-fn" onclick="kp('COS')"><span class="kl-main">COS</span><span class="kl-sub">ACS</span></button>
+      <button class="k k-fn" onclick="kp('TAN')"><span class="kl-main">TAN</span><span class="kl-sub">ATN</span></button>
+      <button class="k k-fn" onclick="kp('LOG')"><span class="kl-main">log</span><span class="kl-sub">10ˣ</span></button>
+      <button class="k k-fn" onclick="kp('LN')"><span class="kl-main">ln</span><span class="kl-sub">eˣ</span></button>
+      <button class="k k-fn" onclick="kp('SQR')"><span class="kl-main">√x</span><span class="kl-sub">x²</span></button>
+      <button class="k k-fn" onclick="kp('EXPF')"><span class="kl-main">EXP</span><span class="kl-sub">π</span></button>
+      <div class="kgap"></div>
+      <button class="k k-num k-sm" onclick="kp('PL')"><span class="kl-main">(</span></button>
+      <button class="k k-num k-sm" onclick="kp('PR')"><span class="kl-main">)</span></button>
+      <button class="k k-fn k-sm" onclick="kp('MPLUS')"><span class="kl-main">M+</span><span class="kl-sub">M-</span></button>
+      <button class="k k-fn k-sm" onclick="kp('MR')"><span class="kl-main">MR</span><span class="kl-sub">MC</span></button>
+    </div>
+
+    <!-- ROW 5: More functions + 7 8 9 ÷ -->
+    <div class="krow">
+      <button class="k k-fn" onclick="kp('POW')"><span class="kl-main">xʸ</span><span class="kl-sub">ʸ√x</span></button>
+      <button class="k k-fn" onclick="kp('INV')"><span class="kl-main">1/x</span><span class="kl-sub">x!</span></button>
+      <button class="k k-fn" onclick="kp('HYP')"><span class="kl-main">HYP</span><span class="kl-sub">HYP⁻¹</span></button>
+      <button class="k k-fn" onclick="kp('DMS')"><span class="kl-main">DMS</span><span class="kl-sub">DEG</span></button>
+      <button class="k k-fn" onclick="kp('DEG2')"><span class="kl-main">DEG</span><span class="kl-sub">RAD</span></button>
+      <button class="k k-fn" onclick="kp('FRAC')"><span class="kl-main">FRAC</span><span class="kl-sub">INT</span></button>
+      <button class="k k-fn" onclick="kp('PI')"><span class="kl-main">π</span><span class="kl-sub">2π</span></button>
+      <div class="kgap"></div>
+      <button class="k k-num k-sm" onclick="kp('7')"><span class="kl-main">7</span></button>
+      <button class="k k-num k-sm" onclick="kp('8')"><span class="kl-main">8</span></button>
+      <button class="k k-num k-sm" onclick="kp('9')"><span class="kl-main">9</span></button>
+      <button class="k k-op k-sm" onclick="kp('DIV')"><span class="kl-main">÷</span></button>
+    </div>
+
+    <!-- ROW 6: BASIC keywords + 4 5 6 × -->
+    <div class="krow">
+      <button class="k k-fn" onclick="kp('ABS')"><span class="kl-main">ABS</span><span class="kl-sub">SGN</span></button>
+      <button class="k k-fn" onclick="kp('RND')"><span class="kl-main">RND</span><span class="kl-sub">SEED</span></button>
+      <button class="k k-fn" onclick="kp('FOR_KEY')"><span class="kl-main">FOR</span><span class="kl-sub">NEXT</span></button>
+      <button class="k k-fn" onclick="kp('IF_KEY')"><span class="kl-main">IF</span><span class="kl-sub">THEN</span></button>
+      <button class="k k-fn" onclick="kp('GOTO_KEY')"><span class="kl-main">GOTO</span><span class="kl-sub">GSUB</span></button>
+      <button class="k k-fn" onclick="kp('PRT_KEY')"><span class="kl-main">PRINT</span><span class="kl-sub">INPUT</span></button>
+      <button class="k k-fn" onclick="kp('ANS')"><span class="kl-main">ANS</span><span class="kl-sub">VAL</span></button>
+      <div class="kgap"></div>
+      <button class="k k-num k-sm" onclick="kp('4')"><span class="kl-main">4</span></button>
+      <button class="k k-num k-sm" onclick="kp('5')"><span class="kl-main">5</span></button>
+      <button class="k k-num k-sm" onclick="kp('6')"><span class="kl-main">6</span></button>
+      <button class="k k-op k-sm" onclick="kp('MUL')"><span class="kl-main">×</span></button>
+    </div>
+
+    <!-- ROW 7: More + 1 2 3 − -->
+    <div class="krow">
+      <button class="k k-fn" onclick="kp('EQ')"><span class="kl-main">=</span><span class="kl-sub">&lt;&gt;</span></button>
+      <button class="k k-fn" onclick="kp('LT')"><span class="kl-main">&lt;</span><span class="kl-sub">&lt;=</span></button>
+      <button class="k k-fn" onclick="kp('GT')"><span class="kl-main">&gt;</span><span class="kl-sub">&gt;=</span></button>
+      <button class="k k-fn" onclick="kp('PL2')"><span class="kl-main">(</span><span class="kl-sub">]</span></button>
+      <button class="k k-fn" onclick="kp('POW_KEY')"><span class="kl-main">^</span><span class="kl-sub">E</span></button>
+      <button class="k k-fn" onclick="kp('STAT')"><span class="kl-main">RUN</span><span class="kl-sub">NEW</span></button>
+      <button class="k k-fn" onclick="kp('LIST_KEY')"><span class="kl-main">LIST</span><span class="kl-sub">DATA</span></button>
+      <div class="kgap"></div>
+      <button class="k k-num k-sm" onclick="kp('1')"><span class="kl-main">1</span></button>
+      <button class="k k-num k-sm" onclick="kp('2')"><span class="kl-main">2</span></button>
+      <button class="k k-num k-sm" onclick="kp('3')"><span class="kl-main">3</span></button>
+      <button class="k k-op k-sm" onclick="kp('SUB')"><span class="kl-main">−</span></button>
+    </div>
+
+    <!-- ROW 8: cursor + space + 0 . +/- + -->
+    <div class="krow">
+      <button class="k k-sys k-md" onclick="kp('CUR_L')"><span class="kl-main">◀</span></button>
+      <button class="k k-sys k-md" onclick="kp('CUR_R')"><span class="kl-main">▶</span></button>
+      <button class="k k-fn k-md" onclick="kp('STOP_KEY')"><span class="kl-main">STOP</span><span class="kl-sub">CONT</span></button>
+      <button class="k k-alpha k-xl" onclick="kp('SPACE')"><span class="kl-main">SPACE</span></button>
+      <div class="kgap"></div>
+      <button class="k k-num" onclick="kp('0')" style="flex:0 0 58px"><span class="kl-main">0</span></button>
+      <button class="k k-num k-sm" onclick="kp('DOT')"><span class="kl-main">.</span></button>
+      <button class="k k-num k-sm" onclick="kp('NEG')"><span class="kl-main">+/-</span></button>
+      <button class="k k-op k-sm" onclick="kp('ADD')"><span class="kl-main">+</span></button>
+    </div>
+
+  </div><!-- /keyboard-wrap -->
+</div><!-- /calculator -->
+
+<!-- ═══════════════ TERMINAL PANEL ═══════════════ -->
+<div class="terminal-panel">
+
+  <div class="terminal">
+    <div class="t-header">
+      <div class="t-title">TERMINAL / OUTPUT</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="run-badge" id="runBadge"><div class="run-dot"></div>RUNNING</div>
+        <div class="t-dots">
+          <div class="t-dot dot-r" onclick="clearTerm()" title="Clear output"></div>
+          <div class="t-dot dot-y" onclick="stopProg()" title="Stop program"></div>
+          <div class="t-dot dot-g" onclick="runProg()" title="Run program"></div>
         </div>
       </div>
-      
-      <div class="terminal-output" id="terminal-output">
-        <div class="output-line system">Sharp PC-1403 BASIC Emulator v1.0</div>
-        <div class="output-line system">Ready.</div>
-        <div class="output-line">&nbsp;</div>
-      </div>
-      
-      <div class="terminal-input-row">
-        <span class="terminal-prompt">&gt;&nbsp;</span>
-        <input type="text" id="terminal-input" 
-               placeholder="Enter BASIC command or expression..." 
-               autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false">
-        <button class="btn-run" onclick="handleTerminalEnter()">ENTER</button>
-      </div>
     </div>
-    
-    <!-- Sample programs -->
-    <div class="samples-row">
-      <button class="sample-btn" onclick="loadSample('hello')">Hello World</button>
-      <button class="sample-btn" onclick="loadSample('fibonacci')">Fibonacci</button>
-      <button class="sample-btn" onclick="loadSample('trig')">Trig Demo</button>
-      <button class="sample-btn" onclick="loadSample('prime')">Primes</button>
-      <button class="sample-btn" onclick="loadSample('matrix')">Matrix Calc</button>
-      <button class="sample-btn" onclick="loadSample('game')">Number Game</button>
+    <div class="t-out" id="tout">
+      <div class="oline sys">Sharp PC-1403 BASIC Emulator v1.1</div>
+      <div class="oline sys">Ready.</div>
+      <div class="oline">&nbsp;</div>
     </div>
-    
-    <!-- Help panel -->
-    <div class="help-panel">
-      <div class="help-header" onclick="toggleHelp()">
-        <div class="help-title">QUICK REFERENCE</div>
-        <div class="help-toggle" id="help-toggle">▼</div>
-      </div>
-      <div class="help-content" id="help-content">
-        <div><b>PRINT</b> expr / "text" &nbsp;&nbsp; <b>INPUT</b> var</div>
-        <div><b>LET</b> A = expr &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <b>IF</b> cond <b>THEN</b> stmt</div>
-        <div><b>FOR</b> I=1 <b>TO</b> 10 &nbsp;&nbsp;&nbsp; <b>NEXT</b> I</div>
-        <div><b>GOTO</b> n &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <b>GOSUB</b> n</div>
-        <div><b>DIM</b> A(10) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <b>DATA</b> 1,2,3</div>
-        <div><b>SIN</b> <b>COS</b> <b>TAN</b> &nbsp;&nbsp; <b>ASN</b> <b>ACS</b> <b>ATN</b></div>
-        <div><b>LOG</b> <b>LN</b> <b>EXP</b> &nbsp;&nbsp;&nbsp;&nbsp; <b>SQR</b> <b>ABS</b> <b>INT</b></div>
-        <div><b>RND</b> <b>SGN</b> <b>FRAC</b> &nbsp;&nbsp; <b>DEG</b> <b>RAD</b> <b>GRA</b></div>
-        <div><b>STR$</b> <b>CHR$</b> <b>LEN</b> &nbsp;&nbsp; <b>LEFT$</b> <b>RIGHT$</b></div>
-        <div><b>RUN</b> · <b>LIST</b> · <b>NEW</b> &nbsp;&nbsp; <b>STOP</b> · <b>END</b></div>
-        <div><b>LINE#</b> adds to prog &nbsp;&nbsp; <b>DEL</b> line#</div>
-        <div>Angle mode: click DEG/RAD/GRA</div>
-      </div>
+    <div class="t-in-row">
+      <span class="t-prompt">&gt;&nbsp;</span>
+      <input id="ti" type="text"
+        placeholder="Type BASIC commands..."
+        autocomplete="off" autocorrect="off"
+        autocapitalize="characters" spellcheck="false">
+      <button class="btn-ent" onclick="doEnter()">ENTER</button>
     </div>
   </div>
-</div>
 
-<footer class="page-footer">
-  <div>Sharp PC-1403 Emulator · Based on SC61860 CPU architecture</div>
+  <div class="samples">
+    <button class="sbtn" onclick="loadSample('hello')">Hello World</button>
+    <button class="sbtn" onclick="loadSample('fibonacci')">Fibonacci</button>
+    <button class="sbtn" onclick="loadSample('trig')">Trig Table</button>
+    <button class="sbtn" onclick="loadSample('prime')">Prime Finder</button>
+    <button class="sbtn" onclick="loadSample('game')">Guess Game</button>
+    <button class="sbtn" onclick="loadSample('calc')">Calculator</button>
+  </div>
+
+  <div class="help">
+    <div class="help-hdr" onclick="toggleHelp()">
+      <div class="help-ttl">BASIC QUICK REFERENCE</div>
+      <div class="help-arr" id="harr">▼</div>
+    </div>
+    <div class="help-body" id="hbody">
+      <div><b>PRINT</b> "text" / expr</div>
+      <div><b>INPUT</b> "prompt"; var</div>
+      <div><b>LET</b> A = expression</div>
+      <div><b>IF</b> cond <b>THEN</b> stmt</div>
+      <div><b>FOR</b> I=1 <b>TO</b> 10</div>
+      <div><b>NEXT</b> I · <b>GOTO</b> n</div>
+      <div><b>GOSUB</b> n · <b>RETURN</b></div>
+      <div><b>DIM</b> A(10) · <b>DATA</b></div>
+      <div><b>SIN COS TAN</b> (angle)</div>
+      <div><b>LOG LN EXP SQR</b></div>
+      <div><b>ABS INT SGN RND</b></div>
+      <div><b>STR$ CHR$ LEFT$</b></div>
+      <div><b>RUN LIST NEW STOP</b></div>
+      <div>F5=RUN · Ctrl+C=STOP</div>
+    </div>
+  </div>
+
+</div><!-- /terminal-panel -->
+</div><!-- /main-layout -->
+
+<footer>
+  <div>Sharp PC-1403 Web Emulator · SC61860 CPU Architecture</div>
   <div>
-    <a href="https://github.com/matsumo/PockEmul" target="_blank">PockEmul reference</a> · 
-    <a href="https://github.com/utz82/SC61860-Instruction-Set" target="_blank">SC61860 docs</a>
+    <a href="https://github.com/matsumo/PockEmul" target="_blank">PockEmul</a> ·
+    <a href="https://github.com/utz82/SC61860-Instruction-Set" target="_blank">SC61860 ISA</a>
   </div>
 </footer>
 
-<!-- Scripts -->
 <script src="js/sc61860.js"></script>
 <script src="js/hardware.js"></script>
 <script src="js/basic.js"></script>
 <script>
-// ─────────────────────────── MAIN APPLICATION ──────────────────────────────
+let display, basic;
+let shiftOn = false;
+let lastAns = 0;
 
-let display, keyboard, basic;
-let inputLineBuffer = '';
+// ── LCD setup ──
+const lcdCanvas = document.getElementById('lcd');
+function setupLcd() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = lcdCanvas.parentElement.clientWidth;
+  lcdCanvas.width  = w * dpr;
+  lcdCanvas.height = 56 * dpr;
+  lcdCanvas.style.width  = w + 'px';
+  lcdCanvas.style.height = '56px';
+  if (display) {
+    display.W = w; display.H = 56;
+    display.ctx.setTransform(1,0,0,1,0,0);
+    display.ctx.scale(dpr, dpr);
+    display.render();
+  }
+}
 
-// Sample programs
+window.addEventListener('load', () => {
+  setupLcd();
+  display = new PC1403Display(lcdCanvas);
+  basic = new PC1403Basic(display, null);
+  basic.onPrint = (txt, nl) => addOut(txt, nl, 'output');
+  basic.onBeep  = beep;
+  basic.onModeChange = updateModeInds;
+
+  display.showText('PC-1403 READY');
+  setTimeout(() => display.showText(''), 1800);
+
+  document.addEventListener('keydown', onPhysKey);
+
+  const ti = document.getElementById('ti');
+  ti.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); doEnter(); }
+    if (e.key === 'Escape') stopProg();
+  });
+
+  window.addEventListener('resize', setupLcd);
+  setAngle('DEG');
+
+  setTimeout(() => {
+    addOut('Type BASIC commands, or tap a sample →', true, 'sys');
+    addOut('Try: PRINT SIN(30)  or load a sample', true, 'sys');
+  }, 700);
+});
+
+// ── Output ──
+let partialLine = null;
+function addOut(text, nl, cls='output') {
+  const out = document.getElementById('tout');
+  if (!nl) {
+    if (!partialLine) {
+      partialLine = document.createElement('div');
+      partialLine.className = 'oline ' + cls;
+      out.appendChild(partialLine);
+    }
+    partialLine.textContent += text;
+  } else {
+    if (partialLine) { partialLine.textContent += text; partialLine = null; }
+    else {
+      const d = document.createElement('div');
+      d.className = 'oline ' + cls;
+      d.textContent = text;
+      out.appendChild(d);
+    }
+  }
+  out.scrollTop = out.scrollHeight;
+  const lines = out.querySelectorAll('.oline');
+  if (lines.length > 600) for (let i=0;i<60;i++) lines[i].remove();
+}
+
+function clearTerm() {
+  document.getElementById('tout').innerHTML='';
+  addOut('Ready.', true, 'sys');
+  partialLine = null;
+}
+
+// ── Run / Stop ──
+async function runProg() {
+  if (basic.running) { stopProg(); return; }
+  if (!basic.program.length) { addOut('No program loaded.', true, 'sys'); return; }
+  addOut('RUN', true, 'sys');
+  document.getElementById('runBadge').classList.add('on');
+  document.getElementById('i-run').classList.add('on');
+  display.setIndicator('RUN', true);
+  await basic.run();
+  document.getElementById('runBadge').classList.remove('on');
+  document.getElementById('i-run').classList.remove('on');
+  display.setIndicator('RUN', false);
+  addOut('Ready.', true, 'sys');
+}
+
+function stopProg() {
+  basic.stop();
+  document.getElementById('runBadge').classList.remove('on');
+  document.getElementById('i-run').classList.remove('on');
+  display.setIndicator('RUN', false);
+  if (basic.running || basic.inputMode) addOut('BREAK', true, 'sys');
+}
+
+// ── Command entry ──
+async function doEnter() {
+  const ti = document.getElementById('ti');
+  const cmd = ti.value.trim();
+  ti.value = '';
+  if (!cmd) return;
+
+  if (basic.inputMode) {
+    addOut(cmd, true, 'echo');
+    basic.handleKeyInput(cmd);
+    basic.handleKeyInput('Enter');
+    return;
+  }
+
+  addOut('> ' + cmd, true, 'echo');
+  const up = cmd.toUpperCase();
+  if (up === 'RUN')   { runProg(); return; }
+  if (up === 'STOP' || up === 'BRK') { stopProg(); return; }
+  if (up === 'CLS' || up === 'CLEAR') { clearTerm(); return; }
+  if (up === 'NEW')   { basic._initSystem(); addOut('OK', true, 'sys'); display.showText(''); return; }
+  await basic.execute(cmd);
+  display.showText('');
+}
+
+function onPhysKey(e) {
+  if (e.ctrlKey && e.key === 'c') { stopProg(); return; }
+  if (e.key === 'F5') { e.preventDefault(); runProg(); }
+}
+
+// ── Key press handler ──
+const getField = () => document.getElementById('ti');
+
+function kp(id) {
+  const shifted = shiftOn;
+
+  if (id === 'SHIFT') {
+    shiftOn = !shiftOn;
+    document.getElementById('shiftBtn').classList.toggle('on', shiftOn);
+    document.getElementById('i-shf').classList.toggle('on', shiftOn);
+    document.getElementById('kb').classList.toggle('shifted', shiftOn);
+    return;
+  }
+
+  // Reset shift
+  if (shiftOn && id !== 'SHIFT') {
+    shiftOn = false;
+    document.getElementById('shiftBtn').classList.remove('on');
+    document.getElementById('i-shf').classList.remove('on');
+    document.getElementById('kb').classList.remove('shifted');
+  }
+
+  const f = getField();
+
+  // Direct char insert mapping
+  const chars = {
+    '0':'0','1':'1','2':'2','3':'3','4':'4',
+    '5':'5','6':'6','7':'7','8':'8','9':'9',
+    'DOT':'.','ADD':'+','SUB':'-','MUL':'*','DIV':'/',
+    'PL':'(','PR':')','PL2':'(',
+    'EQ':'=','LT':'<','GT':'>',
+    'COMMA':',','SEMI':';','QUOT':'"',
+    'POW_KEY':'^','SPACE':' ',
+    'Q':'Q','W':'W','E':'E','R':'R','T':'T','Y':'Y','U':'U','I':'I','O':'O',
+    'A':'A','S':'S','D':'D','F':'F','G':'G','H':'H','J':'J','K':'K','L':'L',
+    'Z':'Z','X':'X','C':'C','V':'V','B':'B','N':'N','M':'M',
+    'SPC':' ',
+  };
+
+  // Shifted overrides
+  const shiftedChars = {
+    'EQ':'<>','LT':'<=','GT':'>=','SEMI':':',
+    'POW_KEY':'E','PL2':']','SQR':'^2',
+  };
+
+  // String inserts (function names, keywords)
+  const fnInsert = {
+    'SIN':'SIN(','COS':'COS(','TAN':'TAN(',
+    'LOG':'LOG(','LN':'LN(','SQR':'SQR(',
+    'EXPF':'EXP(','POW':'^(','INV':'1/(',
+    'ABS':'ABS(','FRAC':'FRAC(',
+    'RND':'RND','PI':'PI',
+    'FOR_KEY':'FOR ','IF_KEY':'IF ','GOTO_KEY':'GOTO ',
+    'PRT_KEY':'PRINT ','LIST_KEY':'LIST',
+    'HYP':'',
+  };
+  const shiftedFn = {
+    'SIN':'ASN(','COS':'ACS(','TAN':'ATN(',
+    'LOG':'10^(','LN':'EXP(','SQR':'(^2',
+    'POW':'ʸ√(','INV':'FACT(',
+    'EXPF': String(Math.PI.toPrecision(10)),
+    'ABS':'SGN(','FRAC':'INT(',
+    'PI':'2*PI','RND':'',
+    'FOR_KEY':'NEXT ','IF_KEY':'THEN ',
+    'GOTO_KEY':'GOSUB ','PRT_KEY':'INPUT ',
+    'LIST_KEY':'DATA ','STAT':'NEW',
+    'DMS':'DMS(','DEG2':'GRA',
+    'MPLUS':'M-','MR':'MC',
+  };
+
+  switch(id) {
+    case 'ENTER':   doEnter(); return;
+    case 'BS':      f.value = f.value.slice(0,-1); break;
+    case 'INS':     return;
+    case 'CLS':     clearTerm(); return;
+    case 'OFF':     display.showText(''); display.clear(); return;
+    case 'MODE':    toggleMode(); return;
+    case 'CAL':
+      shifted ? runProg() : addOut('CAL mode', true, 'sys');
+      return;
+    case 'STOP_KEY': stopProg(); return;
+    case 'DEG2':
+      if (shifted) setAngle('GRA');
+      else if (basic.angleMode === 'DEG') setAngle('RAD');
+      else if (basic.angleMode === 'RAD') setAngle('GRA');
+      else setAngle('DEG');
+      return;
+    case 'NEG':
+      f.value = f.value.startsWith('-') ? f.value.slice(1) : '-'+f.value;
+      break;
+    case 'MPLUS': {
+      try {
+        const v = basic.evalExpr(f.value||'0');
+        basic.variables['M'] = (basic.variables['M']||0) + (shifted ? -v : v);
+        document.getElementById('i-m').classList.add('on');
+        display.showText('M='+basic._formatNum(basic.variables['M']));
+        f.value = '';
+      } catch(e){}
+      return;
+    }
+    case 'MR':
+      if (shifted) { basic.variables['M']=0; document.getElementById('i-m').classList.remove('on'); display.showText('M=0'); }
+      else f.value += basic._formatNum(basic.variables['M']||0);
+      break;
+    case 'ANS': f.value += String(lastAns); break;
+    case 'STAT':
+      if (shifted) { basic._initSystem(); addOut('NEW', true, 'sys'); }
+      else runProg();
+      return;
+    case 'CUR_L': { const p=f.selectionStart; if(p>0) f.setSelectionRange(p-1,p-1); f.focus(); return; }
+    case 'CUR_R': { const p=f.selectionStart; f.setSelectionRange(p+1,p+1); f.focus(); return; }
+    case 'DMS': f.value += shifted ? 'DMS(' : 'DMS('; break;
+    default: {
+      let ins = '';
+      if (shifted) {
+        ins = shiftedChars[id] || shiftedFn[id] || chars[id] || '';
+      } else {
+        ins = fnInsert[id] !== undefined ? fnInsert[id] : (chars[id] || '');
+      }
+      if (ins) f.value += ins;
+      break;
+    }
+  }
+
+  if (f.value && !basic.running) display.showText(f.value.slice(-24));
+  f.focus();
+}
+
+function toggleMode() {
+  const modes = ['RUN','PRO','CAL'];
+  const i = modes.indexOf(basic.mode || 'RUN');
+  basic.mode = modes[(i+1)%3];
+  updateModeInds(basic.mode);
+}
+function updateModeInds(mode) {
+  document.getElementById('i-run').classList.toggle('on', mode==='RUN');
+  document.getElementById('i-pro').classList.toggle('on', mode==='PRO');
+}
+
+function setAngle(mode) {
+  if (basic) basic.angleMode = mode;
+  ['DEG','RAD','GRA'].forEach(m =>
+    document.getElementById('i-'+m.toLowerCase()).classList.toggle('on', m===mode)
+  );
+}
+
+// ── Samples ──
 const SAMPLES = {
-  hello: [
+  hello:[
     '10 PRINT "SHARP PC-1403"',
-    '20 PRINT "HELLO WORLD!"',
+    '20 PRINT "POCKET COMPUTER"',
     '30 FOR I=1 TO 5',
-    '40 PRINT I;" * PI =";I*3.14159265',
+    '40 PRINT "LINE";I',
     '50 NEXT I',
-    '60 PRINT "DONE."',
+    '60 PRINT "DONE!"',
   ],
-  fibonacci: [
-    '10 PRINT "FIBONACCI SEQUENCE"',
+  fibonacci:[
+    '10 PRINT "FIBONACCI:"',
     '20 A=0:B=1',
     '30 FOR I=1 TO 15',
-    '40 PRINT A;',
+    '40 PRINT A;" ";',
     '50 C=A+B:A=B:B=C',
     '60 NEXT I',
     '70 PRINT',
   ],
-  trig: [
+  trig:[
     '10 DEG',
-    '20 PRINT "ANGLE  SIN     COS     TAN"',
-    '30 FOR D=0 TO 90 STEP 15',
-    '40 PRINT D;" ";SIN(D);" ";COS(D);" ";TAN(D)',
+    '20 PRINT "DEG  SIN    COS"',
+    '30 FOR D=0 TO 90 STEP 10',
+    '40 PRINT D;" ";INT(SIN(D)*10000)/10000;" ";INT(COS(D)*10000)/10000',
     '50 NEXT D',
   ],
-  prime: [
-    '10 PRINT "PRIME NUMBERS UP TO 100"',
+  prime:[
+    '10 PRINT "PRIMES TO 100:"',
     '20 FOR N=2 TO 100',
     '30 P=1',
     '40 FOR D=2 TO SQR(N)',
@@ -738,380 +878,65 @@ const SAMPLES = {
     '80 NEXT N',
     '90 PRINT',
   ],
-  matrix: [
-    '10 PRINT "2x2 MATRIX MULTIPLY"',
-    '20 A=1:B=2:C=3:D=4',
-    '30 E=5:F=6:G=7:H=8',
-    '40 PRINT "A:";A;B;C;D',
-    '50 PRINT "B:";E;F;G;H',
-    '60 R1=A*E+B*G',
-    '70 R2=A*F+B*H',
-    '80 R3=C*E+D*G',
-    '90 R4=C*F+D*H',
-    '100 PRINT "AxB:";R1;R2;R3;R4',
+  game:[
+    '10 PRINT "GUESS 1-100"',
+    '20 N=INT(RND*100)+1:T=0',
+    '30 T=T+1',
+    '40 INPUT "GUESS";G',
+    '50 IF G=N THEN PRINT "YES! ";T;" TRIES":END',
+    '60 IF G<N THEN PRINT "HIGHER"',
+    '70 IF G>N THEN PRINT "LOWER"',
+    '80 IF T<7 THEN GOTO 30',
+    '90 PRINT "ANSWER:";N',
   ],
-  game: [
-    '10 PRINT "GUESS THE NUMBER"',
-    '20 N=INT(RND*100)+1',
-    '30 PRINT "0-100, GO!"',
-    '40 FOR T=1 TO 7',
-    '50 INPUT "GUESS";G',
-    '60 IF G=N THEN PRINT "YES! IN ";T;" TRIES":GOTO 100',
-    '70 IF G<N THEN PRINT "HIGHER"',
-    '80 IF G>N THEN PRINT "LOWER"',
-    '90 NEXT T',
-    '95 PRINT "ANSWER:";N',
-    '100 END',
+  calc:[
+    '10 PRINT "RPN CALCULATOR"',
+    '20 PRINT "TYPE EXPRESSION"',
+    '30 INPUT "EXPR";A',
+    '40 PRINT "= ";A',
+    '50 GOTO 30',
   ],
 };
 
-// ─── Init ──────────────────────────────────────────────────────────────────
-window.addEventListener('load', () => {
-  const canvas = document.getElementById('lcd-canvas');
-  
-  // Resize canvas to match container
-  const resizeCanvas = () => {
-    const w = canvas.parentElement.clientWidth;
-    canvas.style.width  = w + 'px';
-    canvas.style.height = '70px';
-  };
-  resizeCanvas();
-  
-  display = new PC1403Display(canvas);
-  
-  const kbContainer = document.getElementById('keyboard-container');
-  keyboard = new PC1403Keyboard(kbContainer, handleKeyPress);
-  
-  basic = new PC1403Basic(display, keyboard);
-  
-  basic.onPrint = (text, newline) => {
-    appendOutput(text, newline, 'output');
-  };
-  
-  basic.onBeep = () => {
-    beep();
-  };
-  
-  basic.onModeChange = (mode) => {
-    updateModeIndicators(mode);
-  };
-  
-  // Start in RUN mode
-  display.showText('PC-1403 READY');
-  setTimeout(() => display.showText(''), 2000);
-  
-  // Keyboard listener
-  document.addEventListener('keydown', handlePhysicalKey);
-  
-  const input = document.getElementById('terminal-input');
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleTerminalEnter();
-    }
-    if (e.key === 'Escape') {
-      stopProgram();
-    }
-  });
-  
-  window.addEventListener('resize', () => {
-    resizeCanvas();
-    display._setupCanvas();
-  });
-  
-  updateAngleIndicators();
-  
-  // Welcome message
-  setTimeout(() => {
-    appendOutput('Type BASIC commands or load a sample →', true, 'system');
-    appendOutput('Try: PRINT SIN(30)', true, 'system');
-  }, 500);
-});
-
-// ─── Terminal I/O ──────────────────────────────────────────────────────────
-let outputBuffer = '';
-
-function appendOutput(text, newline, type='output') {
-  const out = document.getElementById('terminal-output');
-  
-  if (!newline && type !== 'system') {
-    // Append to buffer for same line
-    outputBuffer += text;
-    // Update or create last line
-    let lastLine = out.querySelector('.output-line:last-child');
-    if (!lastLine || lastLine.dataset.continuing !== 'true') {
-      lastLine = document.createElement('div');
-      lastLine.className = `output-line ${type}`;
-      lastLine.dataset.continuing = 'true';
-      out.appendChild(lastLine);
-    }
-    lastLine.textContent = outputBuffer;
-  } else {
-    outputBuffer = '';
-    const line = document.createElement('div');
-    line.className = `output-line ${type}`;
-    line.textContent = text;
-    out.appendChild(line);
-    // Mark last as final
-    const prev = out.querySelector('.output-line[data-continuing="true"]');
-    if (prev) prev.dataset.continuing = 'false';
-  }
-  
-  out.scrollTop = out.scrollHeight;
-  
-  // Limit output lines
-  const lines = out.querySelectorAll('.output-line');
-  if (lines.length > 500) {
-    for (let i = 0; i < 50; i++) lines[i].remove();
-  }
-}
-
-async function handleTerminalEnter() {
-  const input = document.getElementById('terminal-input');
-  const cmd = input.value.trim();
-  input.value = '';
-  
-  if (!cmd) return;
-  
-  // Handle input mode
-  if (basic.inputMode) {
-    appendOutput('> ' + cmd, true, 'input-echo');
-    basic.handleKeyInput(cmd);
-    basic.handleKeyInput('Enter');
-    return;
-  }
-  
-  appendOutput('> ' + cmd, true, 'input-echo');
-  
-  // Check for RUN command
-  if (cmd.toUpperCase() === 'RUN') {
-    runProgram();
-    return;
-  }
-  
-  if (cmd.toUpperCase() === 'STOP' || cmd.toUpperCase() === 'BRK') {
-    stopProgram();
-    return;
-  }
-  
-  if (cmd.toUpperCase() === 'CLS' || cmd.toUpperCase() === 'CLEAR') {
-    clearTerminal();
-    return;
-  }
-  
-  if (cmd.toUpperCase() === 'NEW') {
-    basic._initSystem();
-    appendOutput('OK', true, 'system');
-    display.showText('');
-    return;
-  }
-  
-  await basic.execute(cmd);
-}
-
-function clearTerminal() {
-  const out = document.getElementById('terminal-output');
-  out.innerHTML = '';
-  appendOutput('Ready.', true, 'system');
-}
-
-async function runProgram() {
-  if (basic.running) { stopProgram(); return; }
-  if (basic.program.length === 0) {
-    appendOutput('No program loaded.', true, 'system');
-    return;
-  }
-  appendOutput('RUN', true, 'system');
-  document.getElementById('running-badge').classList.add('visible');
-  document.getElementById('ind-run').classList.add('active');
-  display.setIndicator('RUN', true);
-  
-  await basic.run();
-  
-  document.getElementById('running-badge').classList.remove('visible');
-  document.getElementById('ind-run').classList.remove('active');
-  display.setIndicator('RUN', false);
-  appendOutput('Ready.', true, 'system');
-}
-
-function stopProgram() {
-  if (basic.running || basic.inputMode) {
-    basic.stop();
-    document.getElementById('running-badge').classList.remove('visible');
-    document.getElementById('ind-run').classList.remove('active');
-    display.setIndicator('RUN', false);
-    appendOutput('BREAK', true, 'system');
-  }
-}
-
-// ─── Sample programs ───────────────────────────────────────────────────────
 function loadSample(name) {
   if (!SAMPLES[name]) return;
-  
   basic._initSystem();
-  clearTerminal();
-  appendOutput(`Loading: ${name.toUpperCase()}`, true, 'system');
-  
+  clearTerm();
+  addOut('── '+name.toUpperCase()+' ──', true, 'sys');
   for (const line of SAMPLES[name]) {
     basic.execute(line);
-    appendOutput(line, true, 'output');
+    addOut(line, true, 'output');
   }
-  
-  appendOutput('Program loaded. Press RUN or type RUN.', true, 'system');
+  addOut('Loaded! Click ▶ (green dot) or type RUN', true, 'sys');
 }
 
-// ─── Keyboard handling ─────────────────────────────────────────────────────
-function handleKeyPress(id, shifted, keyDef) {
-  // Forward to input field if not in special mode
-  const input = document.getElementById('terminal-input');
-  
-  // Update shift indicator
-  document.getElementById('ind-shift').classList.toggle('active', keyboard.shiftActive);
-  
-  // Handle specific keys
-  const keyMap = {
-    '0':'0','1':'1','2':'2','3':'3','4':'4',
-    '5':'5','6':'6','7':'7','8':'8','9':'9',
-    'DOT':'.', 'ADD':'+', 'SUB':'-', 'MUL':'*', 'DIV':'/',
-    'NEG': shifted ? '=' : function(){
-      const v=input.value;
-      if(v && !isNaN(parseFloat(v))){
-        input.value = v.startsWith('-') ? v.slice(1) : '-'+v;
-      } else {
-        input.value += '-';
-      }
-      return null;
-    },
-    'PAREN_L':'(', 'PAREN_R':')',
-    'EXP': shifted ? String(Math.PI.toPrecision(10)) : 'E',
-    'ENTER': () => { handleTerminalEnter(); return null; },
-    'BS': () => { input.value = input.value.slice(0,-1); return null; },
-    'CLS': () => { clearTerminal(); return null; },
-  };
-  
-  // Function keys
-  const funcKeys = {
-    'SIN': shifted ? 'ASN(' : 'SIN(',
-    'COS': shifted ? 'ACS(' : 'COS(',
-    'TAN': shifted ? 'ATN(' : 'TAN(',
-    'LOG': shifted ? '10^(' : 'LOG(',
-    'LN':  shifted ? 'EXP(' : 'LN(',
-    'SQR': shifted ? '^2' : 'SQR(',
-    'POW': shifted ? '^(1/' : '^(',
-    'DEG': () => { toggleAngleByKey(); return null; },
-    'MODE': () => { toggleMode(); return null; },
-    'CALC': () => {
-      if (basic.running) stopProgram();
-      else runProgram();
-      return null;
-    },
-    'MR': () => { input.value += String(basic.variables['M']||0); return null; },
-    'M+': () => {
-      try {
-        const v = basic.evalExpr(input.value||'0');
-        basic.variables['M'] = (basic.variables['M']||0) + v;
-        document.getElementById('ind-m').classList.add('active');
-        display.showText('M='+ basic._formatNum(basic.variables['M']));
-        input.value='';
-      } catch(e){}
-      return null;
-    },
-    'OFF': () => { display.showText(''); display.clear(); return null; },
-    'INS': () => { input.value += ''; return null; }, // TODO: insert mode
-  };
-  
-  const handler = funcKeys[id] || keyMap[id];
-  if (!handler) return;
-  
-  if (typeof handler === 'function') {
-    handler();
-  } else if (typeof handler === 'string') {
-    input.value += handler;
-    input.focus();
-  }
-  
-  // Visual feedback on LCD
-  if (input.value && !basic.running) {
-    display.showText(input.value.slice(-24));
-  }
-}
-
-function handlePhysicalKey(e) {
-  // Ctrl+C to stop
-  if (e.ctrlKey && e.key === 'c') {
-    stopProgram();
-    return;
-  }
-  // F5 to run
-  if (e.key === 'F5') {
-    e.preventDefault();
-    runProgram();
-  }
-}
-
-// ─── Angle mode ────────────────────────────────────────────────────────────
-function toggleAngle(mode) {
-  basic.angleMode = mode;
-  updateAngleIndicators();
-}
-
-function toggleAngleByKey() {
-  const modes = ['DEG','RAD','GRA'];
-  const idx = modes.indexOf(basic.angleMode);
-  basic.angleMode = modes[(idx+1)%3];
-  updateAngleIndicators();
-  display.showText(basic.angleMode);
-}
-
-function updateAngleIndicators() {
-  document.getElementById('ind-deg').classList.toggle('active', basic.angleMode==='DEG');
-  document.getElementById('ind-rad').classList.toggle('active', basic.angleMode==='RAD');
-  document.getElementById('ind-gra').classList.toggle('active', basic.angleMode==='GRA');
-}
-
-// ─── Mode switching ────────────────────────────────────────────────────────
-function toggleMode() {
-  const modes = ['RUN','PRO','CAL'];
-  const idx = modes.indexOf(basic.mode);
-  basic.setMode(modes[(idx+1)%3]);
-  updateModeIndicators(basic.mode);
-}
-
-function updateModeIndicators(mode) {
-  document.getElementById('ind-run').classList.toggle('active', mode==='RUN');
-  document.getElementById('ind-pro').classList.toggle('active', mode==='PRO');
-}
-
-// ─── Help panel ────────────────────────────────────────────────────────────
 function toggleHelp() {
-  const content = document.getElementById('help-content');
-  const toggle  = document.getElementById('help-toggle');
-  content.classList.toggle('visible');
-  toggle.classList.toggle('open');
+  document.getElementById('hbody').classList.toggle('vis');
+  document.getElementById('harr').classList.toggle('open');
 }
 
-// ─── Beep ──────────────────────────────────────────────────────────────────
 function beep() {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.frequency.value = 880;
-    osc.type = 'square';
-    gain.gain.setValueAtTime(0.1, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.08);
-  } catch(e) {}
+    const ac = new (window.AudioContext||window.webkitAudioContext)();
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.connect(g); g.connect(ac.destination);
+    o.frequency.value=880; o.type='square';
+    g.gain.setValueAtTime(0.08, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime+0.07);
+    o.start(); o.stop(ac.currentTime+0.07);
+  } catch(e){}
 }
 
-// ─── Service Worker for offline use ────────────────────────────────────────
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+// Touch handling for calculator keys
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.k').forEach(btn => {
+    btn.addEventListener('touchstart', e => { e.preventDefault(); btn.classList.add('pressed'); }, {passive:false});
+    btn.addEventListener('touchend',   e => { e.preventDefault(); btn.classList.remove('pressed'); btn.click(); }, {passive:false});
   });
+});
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
 }
 </script>
 </body>
