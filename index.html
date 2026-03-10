@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#1a1a2e">
+<meta name="description" content="Sharp PC-1403 Pocket Computer Emulator">
+<title>Sharp PC-1403 Emulator</title>
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PC-1403">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=VT323&display=swap" rel="stylesheet">
+
+<style>
+/* ─────────────────────────── RESET & BASE ─────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { height: 100%; }
+
+body {
+  min-height: 100%;
+  background: #0d1117;
+  background-image: 
+    radial-gradient(ellipse at 20% 50%, rgba(26,58,26,0.3) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 20%, rgba(20,40,80,0.3) 0%, transparent 60%);
+  font-family: 'Share Tech Mono', monospace;
+  color: #c9d1d9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 16px 40px;
+  overflow-x: hidden;
+}
+
+/* ─────────────────────────── HEADER ─────────────────────────── */
+.page-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.page-title {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 900;
+  font-size: clamp(18px, 4vw, 32px);
+  color: #8bac0f;
+  text-shadow: 0 0 20px rgba(139,172,15,0.5), 0 0 40px rgba(139,172,15,0.2);
+  letter-spacing: 4px;
+  text-transform: uppercase;
+}
+
+.page-subtitle {
+  font-family: 'VT323', monospace;
+  font-size: clamp(14px, 2.5vw, 18px);
+  color: #4a5568;
+  letter-spacing: 2px;
+  margin-top: 4px;
+}
+
+/* ─────────────────────────── MAIN LAYOUT ─────────────────────────── */
+.emulator-wrapper {
+  display: flex;
+  gap: 20px;
+  width: 100%;
+  max-width: 1100px;
+  align-items: flex-start;
+}
+
+@media (max-width: 768px) {
+  .emulator-wrapper { flex-direction: column; }
+}
+
+/* ─────────────────────────── CALCULATOR BODY ─────────────────────────── */
+.calculator {
+  background: linear-gradient(165deg, #2d2d2d 0%, #1a1a1a 60%, #222 100%);
+  border-radius: 16px 16px 30px 30px;
+  padding: 16px 16px 24px;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.08),
+    0 4px 12px rgba(0,0,0,0.6),
+    0 20px 60px rgba(0,0,0,0.8),
+    inset 0 1px 0 rgba(255,255,255,0.12),
+    inset 0 -2px 0 rgba(0,0,0,0.4);
+  width: 320px;
+  min-width: 300px;
+  flex-shrink: 0;
+}
+
+/* Top brand strip */
+.brand-strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 4px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  margin-bottom: 12px;
+}
+
+.brand-name {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: #8bac0f;
+  letter-spacing: 3px;
+  text-shadow: 0 0 8px rgba(139,172,15,0.4);
+}
+
+.model-name {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 10px;
+  color: #666;
+  letter-spacing: 2px;
+}
+
+.power-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #8bac0f;
+  box-shadow: 0 0 8px rgba(139,172,15,0.8);
+  animation: powerPulse 3s ease-in-out infinite;
+}
+
+@keyframes powerPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ─────────────────────────── LCD SCREEN ─────────────────────────── */
+.screen-bezel {
+  background: linear-gradient(180deg, #111 0%, #1a1a1a 100%);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 14px;
+  box-shadow:
+    inset 0 2px 6px rgba(0,0,0,0.8),
+    inset 0 -1px 3px rgba(255,255,255,0.04),
+    0 0 0 1px rgba(0,0,0,0.5);
+}
+
+.screen-inner {
+  position: relative;
+  background: #8bac0f;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: inset 0 0 20px rgba(0,0,0,0.3);
+}
+
+/* LCD scanline overlay */
+.screen-inner::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.03) 2px,
+    rgba(0,0,0,0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 10;
+}
+
+#lcd-canvas {
+  display: block;
+  width: 100%;
+  height: 70px;
+}
+
+/* ─────────────────────────── STATUS BAR ─────────────────────────── */
+.status-bar {
+  display: flex;
+  gap: 8px;
+  padding: 4px 6px;
+  background: rgba(0,0,0,0.2);
+  border-radius: 4px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.status-ind {
+  font-family: 'VT323', monospace;
+  font-size: 12px;
+  color: #306230;
+  padding: 1px 5px;
+  border-radius: 3px;
+  transition: all 0.1s;
+  cursor: pointer;
+  user-select: none;
+}
+
+.status-ind.active {
+  color: #8bac0f;
+  background: rgba(139,172,15,0.15);
+  text-shadow: 0 0 4px rgba(139,172,15,0.6);
+}
+
+/* ─────────────────────────── KEYBOARD ─────────────────────────── */
+.keyboard {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.key-row {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+}
+
+.key {
+  position: relative;
+  width: 52px;
+  height: 40px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  transition: all 0.08s ease;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  overflow: hidden;
+}
+
+.key::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.12) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.key:active, .key.pressed {
+  transform: translateY(2px);
+  box-shadow: none !important;
+}
+
+.key-main {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.key-sub {
+  font-size: 8px;
+  line-height: 1;
+  opacity: 0.7;
+  margin-top: 2px;
+}
+
+.shifted .key-sub { opacity: 1; color: #ffd700; }
+
+/* Key types */
+.key-num {
+  background: linear-gradient(180deg, #3d3d3d 0%, #2d2d2d 100%);
+  color: #e0e0e0;
+  box-shadow: 0 3px 0 #111, 0 4px 6px rgba(0,0,0,0.4);
+}
+
+.key-op {
+  background: linear-gradient(180deg, #4a3520 0%, #3a2510 100%);
+  color: #f0a040;
+  box-shadow: 0 3px 0 #1a0d00, 0 4px 6px rgba(0,0,0,0.4);
+}
+
+.key-func {
+  background: linear-gradient(180deg, #1a3520 0%, #0f2510 100%);
+  color: #6db36d;
+  box-shadow: 0 3px 0 #071307, 0 4px 6px rgba(0,0,0,0.4);
+  font-size: 10px;
+}
+
+.key-sys {
+  background: linear-gradient(180deg, #2a1a3a 0%, #1a0f2a 100%);
+  color: #9b7bd4;
+  box-shadow: 0 3px 0 #0d0018, 0 4px 6px rgba(0,0,0,0.4);
+}
+
+.key-shift {
+  background: linear-gradient(180deg, #3a3010 0%, #2a2000 100%);
+  color: #ffd700;
+  box-shadow: 0 3px 0 #100e00, 0 4px 6px rgba(0,0,0,0.4);
+}
+
+.key-edit {
+  background: linear-gradient(180deg, #2a2535 0%, #1a1525 100%);
+  color: #a090c0;
+  box-shadow: 0 3px 0 #0a0a15, 0 4px 6px rgba(0,0,0,0.4);
+}
+
+.key-enter {
+  background: linear-gradient(180deg, #1a3030 0%, #0f2020 100%);
+  color: #40d0d0;
+  box-shadow: 0 3px 0 #001515, 0 4px 6px rgba(0,0,0,0.4);
+}
+
+.key-shift.active {
+  background: linear-gradient(180deg, #605030 0%, #504020 100%);
+  box-shadow: 0 0 8px rgba(255,215,0,0.4), 0 3px 0 #1a1500;
+}
+
+/* ─────────────────────────── TERMINAL PANEL ─────────────────────────── */
+.terminal-panel {
+  flex: 1;
+  min-width: 0;
+}
+
+.terminal {
+  background: #0d1117;
+  border: 1px solid rgba(139,172,15,0.2);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(139,172,15,0.05),
+    0 4px 20px rgba(0,0,0,0.5);
+}
+
+.terminal-header {
+  background: #161b22;
+  padding: 8px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(139,172,15,0.15);
+}
+
+.terminal-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 10px;
+  color: #8bac0f;
+  letter-spacing: 2px;
+}
+
+.terminal-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.terminal-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.dot-red   { background: #ff5f57; }
+.dot-yellow{ background: #febc2e; }
+.dot-green { background: #28c840; }
+
+.terminal-output {
+  height: 260px;
+  overflow-y: auto;
+  padding: 12px 16px;
+  font-family: 'VT323', monospace;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #8bac0f;
+  scroll-behavior: smooth;
+}
+
+.terminal-output::-webkit-scrollbar { width: 4px; }
+.terminal-output::-webkit-scrollbar-track { background: transparent; }
+.terminal-output::-webkit-scrollbar-thumb { background: rgba(139,172,15,0.3); border-radius: 2px; }
+
+.output-line {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.output-line.error { color: #ff6b6b; }
+.output-line.system { color: #6b9bd2; }
+.output-line.input-echo { color: #a0c0ff; }
+
+/* Typing cursor */
+.output-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 14px;
+  background: #8bac0f;
+  vertical-align: text-bottom;
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.terminal-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-top: 1px solid rgba(139,172,15,0.15);
+  background: #0d1117;
+}
+
+.terminal-prompt {
+  color: #8bac0f;
+  font-family: 'VT323', monospace;
+  font-size: 18px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+#terminal-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #8bac0f;
+  font-family: 'VT323', monospace;
+  font-size: 18px;
+  caret-color: #8bac0f;
+  min-width: 0;
+}
+
+#terminal-input::placeholder { color: rgba(139,172,15,0.3); }
+
+.btn-run {
+  background: rgba(139,172,15,0.15);
+  border: 1px solid rgba(139,172,15,0.3);
+  color: #8bac0f;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 10px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.btn-run:hover {
+  background: rgba(139,172,15,0.3);
+  box-shadow: 0 0 10px rgba(139,172,15,0.2);
+}
+
+/* ─────────────────────────── QUICK HELP ─────────────────────────── */
+.help-panel {
+  margin-top: 16px;
+  background: #161b22;
+  border: 1px solid rgba(139,172,15,0.12);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.help-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(139,172,15,0.1);
+  cursor: pointer;
+  user-select: none;
+}
+
+.help-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 10px;
+  color: #6b7280;
+  letter-spacing: 1px;
+}
+
+.help-toggle { color: #4a5568; font-size: 12px; transition: transform 0.2s; }
+.help-toggle.open { transform: rotate(180deg); }
+
+.help-content {
+  display: none;
+  padding: 12px 14px;
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.8;
+  column-count: 2;
+  column-gap: 16px;
+}
+
+.help-content.visible { display: block; }
+.help-content b { color: #8bac0f; }
+
+/* ─────────────────────────── PROGRAM SAMPLES ─────────────────────────── */
+.samples-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.sample-btn {
+  background: rgba(26,58,26,0.4);
+  border: 1px solid rgba(139,172,15,0.2);
+  color: #6db36d;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 0.5px;
+}
+
+.sample-btn:hover {
+  background: rgba(139,172,15,0.15);
+  color: #8bac0f;
+  border-color: rgba(139,172,15,0.4);
+}
+
+/* ─────────────────────────── RUNNING INDICATOR ─────────────────────────── */
+.running-badge {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  background: rgba(139,172,15,0.1);
+  border: 1px solid rgba(139,172,15,0.3);
+  border-radius: 12px;
+  font-size: 11px;
+  color: #8bac0f;
+}
+
+.running-badge.visible { display: flex; }
+
+.running-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #8bac0f;
+  animation: runPulse 0.8s ease-in-out infinite;
+}
+
+@keyframes runPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+}
+
+/* ─────────────────────────── FOOTER ─────────────────────────── */
+.page-footer {
+  margin-top: 32px;
+  text-align: center;
+  font-size: 11px;
+  color: #374151;
+  line-height: 1.8;
+}
+
+.page-footer a { color: #4a5568; text-decoration: none; }
+.page-footer a:hover { color: #8bac0f; }
+
+/* ─────────────────────────── RESPONSIVE ─────────────────────────── */
+@media (max-width: 480px) {
+  body { padding: 12px 8px 30px; }
+  
+  .calculator { width: 100%; min-width: 0; }
+  
+  .key { width: 46px; height: 38px; font-size: 10px; }
+  .key-main { font-size: 11px; }
+  .key-sub { font-size: 7.5px; }
+  
+  .key-row { gap: 4px; }
+  .keyboard { gap: 4px; }
+  
+  .terminal-output { height: 200px; }
+  
+  .help-content { column-count: 1; }
+}
+
+@media (max-width: 360px) {
+  .key { width: 40px; height: 35px; }
+  .key-main { font-size: 10px; }
+}
+</style>
+</head>
+<body>
+
+<header class="page-header">
+  <h1 class="page-title">Sharp PC-1403</h1>
+  <div class="page-subtitle">Pocket Computer Emulator · Web Edition</div>
+</header>
+
+<div class="emulator-wrapper">
+
+  <!-- ── CALCULATOR BODY ── -->
+  <div class="calculator" id="calculator">
+    <div class="brand-strip">
+      <div class="brand-name">SHARP</div>
+      <div class="power-indicator" id="power-led"></div>
+      <div class="model-name">PC-1403</div>
+    </div>
+    
+    <div class="screen-bezel">
+      <div class="screen-inner">
+        <canvas id="lcd-canvas"></canvas>
+      </div>
+    </div>
+    
+    <div class="status-bar">
+      <span class="status-ind" id="ind-deg" onclick="toggleAngle('DEG')">DEG</span>
+      <span class="status-ind" id="ind-rad" onclick="toggleAngle('RAD')">RAD</span>
+      <span class="status-ind" id="ind-gra" onclick="toggleAngle('GRA')">GRA</span>
+      <span class="status-ind" id="ind-shift">SHIFT</span>
+      <span class="status-ind" id="ind-hyp">HYP</span>
+      <span class="status-ind" id="ind-m">M</span>
+      <span class="status-ind" id="ind-run" style="margin-left:auto">RUN</span>
+      <span class="status-ind" id="ind-pro">PRO</span>
+    </div>
+    
+    <div id="keyboard-container"></div>
+  </div>
+
+  <!-- ── TERMINAL PANEL ── -->
+  <div class="terminal-panel">
+    <div class="terminal">
+      <div class="terminal-header">
+        <div class="terminal-title">TERMINAL OUTPUT</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="running-badge" id="running-badge">
+            <div class="running-dot"></div>
+            RUNNING
+          </div>
+          <div class="terminal-dots">
+            <div class="terminal-dot dot-red"    onclick="clearTerminal()" title="Clear" style="cursor:pointer"></div>
+            <div class="terminal-dot dot-yellow" onclick="stopProgram()"   title="Stop"  style="cursor:pointer"></div>
+            <div class="terminal-dot dot-green"  onclick="runProgram()"    title="Run"   style="cursor:pointer"></div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="terminal-output" id="terminal-output">
+        <div class="output-line system">Sharp PC-1403 BASIC Emulator v1.0</div>
+        <div class="output-line system">Ready.</div>
+        <div class="output-line">&nbsp;</div>
+      </div>
+      
+      <div class="terminal-input-row">
+        <span class="terminal-prompt">&gt;&nbsp;</span>
+        <input type="text" id="terminal-input" 
+               placeholder="Enter BASIC command or expression..." 
+               autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false">
+        <button class="btn-run" onclick="handleTerminalEnter()">ENTER</button>
+      </div>
+    </div>
+    
+    <!-- Sample programs -->
+    <div class="samples-row">
+      <button class="sample-btn" onclick="loadSample('hello')">Hello World</button>
+      <button class="sample-btn" onclick="loadSample('fibonacci')">Fibonacci</button>
+      <button class="sample-btn" onclick="loadSample('trig')">Trig Demo</button>
+      <button class="sample-btn" onclick="loadSample('prime')">Primes</button>
+      <button class="sample-btn" onclick="loadSample('matrix')">Matrix Calc</button>
+      <button class="sample-btn" onclick="loadSample('game')">Number Game</button>
+    </div>
+    
+    <!-- Help panel -->
+    <div class="help-panel">
+      <div class="help-header" onclick="toggleHelp()">
+        <div class="help-title">QUICK REFERENCE</div>
+        <div class="help-toggle" id="help-toggle">▼</div>
+      </div>
+      <div class="help-content" id="help-content">
+        <div><b>PRINT</b> expr / "text" &nbsp;&nbsp; <b>INPUT</b> var</div>
+        <div><b>LET</b> A = expr &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <b>IF</b> cond <b>THEN</b> stmt</div>
+        <div><b>FOR</b> I=1 <b>TO</b> 10 &nbsp;&nbsp;&nbsp; <b>NEXT</b> I</div>
+        <div><b>GOTO</b> n &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <b>GOSUB</b> n</div>
+        <div><b>DIM</b> A(10) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <b>DATA</b> 1,2,3</div>
+        <div><b>SIN</b> <b>COS</b> <b>TAN</b> &nbsp;&nbsp; <b>ASN</b> <b>ACS</b> <b>ATN</b></div>
+        <div><b>LOG</b> <b>LN</b> <b>EXP</b> &nbsp;&nbsp;&nbsp;&nbsp; <b>SQR</b> <b>ABS</b> <b>INT</b></div>
+        <div><b>RND</b> <b>SGN</b> <b>FRAC</b> &nbsp;&nbsp; <b>DEG</b> <b>RAD</b> <b>GRA</b></div>
+        <div><b>STR$</b> <b>CHR$</b> <b>LEN</b> &nbsp;&nbsp; <b>LEFT$</b> <b>RIGHT$</b></div>
+        <div><b>RUN</b> · <b>LIST</b> · <b>NEW</b> &nbsp;&nbsp; <b>STOP</b> · <b>END</b></div>
+        <div><b>LINE#</b> adds to prog &nbsp;&nbsp; <b>DEL</b> line#</div>
+        <div>Angle mode: click DEG/RAD/GRA</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer class="page-footer">
+  <div>Sharp PC-1403 Emulator · Based on SC61860 CPU architecture</div>
+  <div>
+    <a href="https://github.com/matsumo/PockEmul" target="_blank">PockEmul reference</a> · 
+    <a href="https://github.com/utz82/SC61860-Instruction-Set" target="_blank">SC61860 docs</a>
+  </div>
+</footer>
+
+<!-- Scripts -->
+<script src="js/sc61860.js"></script>
+<script src="js/hardware.js"></script>
+<script src="js/basic.js"></script>
+<script>
+// ─────────────────────────── MAIN APPLICATION ──────────────────────────────
+
+let display, keyboard, basic;
+let inputLineBuffer = '';
+
+// Sample programs
+const SAMPLES = {
+  hello: [
+    '10 PRINT "SHARP PC-1403"',
+    '20 PRINT "HELLO WORLD!"',
+    '30 FOR I=1 TO 5',
+    '40 PRINT I;" * PI =";I*3.14159265',
+    '50 NEXT I',
+    '60 PRINT "DONE."',
+  ],
+  fibonacci: [
+    '10 PRINT "FIBONACCI SEQUENCE"',
+    '20 A=0:B=1',
+    '30 FOR I=1 TO 15',
+    '40 PRINT A;',
+    '50 C=A+B:A=B:B=C',
+    '60 NEXT I',
+    '70 PRINT',
+  ],
+  trig: [
+    '10 DEG',
+    '20 PRINT "ANGLE  SIN     COS     TAN"',
+    '30 FOR D=0 TO 90 STEP 15',
+    '40 PRINT D;" ";SIN(D);" ";COS(D);" ";TAN(D)',
+    '50 NEXT D',
+  ],
+  prime: [
+    '10 PRINT "PRIME NUMBERS UP TO 100"',
+    '20 FOR N=2 TO 100',
+    '30 P=1',
+    '40 FOR D=2 TO SQR(N)',
+    '50 IF N/D=INT(N/D) THEN P=0',
+    '60 NEXT D',
+    '70 IF P=1 THEN PRINT N;" ";',
+    '80 NEXT N',
+    '90 PRINT',
+  ],
+  matrix: [
+    '10 PRINT "2x2 MATRIX MULTIPLY"',
+    '20 A=1:B=2:C=3:D=4',
+    '30 E=5:F=6:G=7:H=8',
+    '40 PRINT "A:";A;B;C;D',
+    '50 PRINT "B:";E;F;G;H',
+    '60 R1=A*E+B*G',
+    '70 R2=A*F+B*H',
+    '80 R3=C*E+D*G',
+    '90 R4=C*F+D*H',
+    '100 PRINT "AxB:";R1;R2;R3;R4',
+  ],
+  game: [
+    '10 PRINT "GUESS THE NUMBER"',
+    '20 N=INT(RND*100)+1',
+    '30 PRINT "0-100, GO!"',
+    '40 FOR T=1 TO 7',
+    '50 INPUT "GUESS";G',
+    '60 IF G=N THEN PRINT "YES! IN ";T;" TRIES":GOTO 100',
+    '70 IF G<N THEN PRINT "HIGHER"',
+    '80 IF G>N THEN PRINT "LOWER"',
+    '90 NEXT T',
+    '95 PRINT "ANSWER:";N',
+    '100 END',
+  ],
+};
+
+// ─── Init ──────────────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  const canvas = document.getElementById('lcd-canvas');
+  
+  // Resize canvas to match container
+  const resizeCanvas = () => {
+    const w = canvas.parentElement.clientWidth;
+    canvas.style.width  = w + 'px';
+    canvas.style.height = '70px';
+  };
+  resizeCanvas();
+  
+  display = new PC1403Display(canvas);
+  
+  const kbContainer = document.getElementById('keyboard-container');
+  keyboard = new PC1403Keyboard(kbContainer, handleKeyPress);
+  
+  basic = new PC1403Basic(display, keyboard);
+  
+  basic.onPrint = (text, newline) => {
+    appendOutput(text, newline, 'output');
+  };
+  
+  basic.onBeep = () => {
+    beep();
+  };
+  
+  basic.onModeChange = (mode) => {
+    updateModeIndicators(mode);
+  };
+  
+  // Start in RUN mode
+  display.showText('PC-1403 READY');
+  setTimeout(() => display.showText(''), 2000);
+  
+  // Keyboard listener
+  document.addEventListener('keydown', handlePhysicalKey);
+  
+  const input = document.getElementById('terminal-input');
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleTerminalEnter();
+    }
+    if (e.key === 'Escape') {
+      stopProgram();
+    }
+  });
+  
+  window.addEventListener('resize', () => {
+    resizeCanvas();
+    display._setupCanvas();
+  });
+  
+  updateAngleIndicators();
+  
+  // Welcome message
+  setTimeout(() => {
+    appendOutput('Type BASIC commands or load a sample →', true, 'system');
+    appendOutput('Try: PRINT SIN(30)', true, 'system');
+  }, 500);
+});
+
+// ─── Terminal I/O ──────────────────────────────────────────────────────────
+let outputBuffer = '';
+
+function appendOutput(text, newline, type='output') {
+  const out = document.getElementById('terminal-output');
+  
+  if (!newline && type !== 'system') {
+    // Append to buffer for same line
+    outputBuffer += text;
+    // Update or create last line
+    let lastLine = out.querySelector('.output-line:last-child');
+    if (!lastLine || lastLine.dataset.continuing !== 'true') {
+      lastLine = document.createElement('div');
+      lastLine.className = `output-line ${type}`;
+      lastLine.dataset.continuing = 'true';
+      out.appendChild(lastLine);
+    }
+    lastLine.textContent = outputBuffer;
+  } else {
+    outputBuffer = '';
+    const line = document.createElement('div');
+    line.className = `output-line ${type}`;
+    line.textContent = text;
+    out.appendChild(line);
+    // Mark last as final
+    const prev = out.querySelector('.output-line[data-continuing="true"]');
+    if (prev) prev.dataset.continuing = 'false';
+  }
+  
+  out.scrollTop = out.scrollHeight;
+  
+  // Limit output lines
+  const lines = out.querySelectorAll('.output-line');
+  if (lines.length > 500) {
+    for (let i = 0; i < 50; i++) lines[i].remove();
+  }
+}
+
+async function handleTerminalEnter() {
+  const input = document.getElementById('terminal-input');
+  const cmd = input.value.trim();
+  input.value = '';
+  
+  if (!cmd) return;
+  
+  // Handle input mode
+  if (basic.inputMode) {
+    appendOutput('> ' + cmd, true, 'input-echo');
+    basic.handleKeyInput(cmd);
+    basic.handleKeyInput('Enter');
+    return;
+  }
+  
+  appendOutput('> ' + cmd, true, 'input-echo');
+  
+  // Check for RUN command
+  if (cmd.toUpperCase() === 'RUN') {
+    runProgram();
+    return;
+  }
+  
+  if (cmd.toUpperCase() === 'STOP' || cmd.toUpperCase() === 'BRK') {
+    stopProgram();
+    return;
+  }
+  
+  if (cmd.toUpperCase() === 'CLS' || cmd.toUpperCase() === 'CLEAR') {
+    clearTerminal();
+    return;
+  }
+  
+  if (cmd.toUpperCase() === 'NEW') {
+    basic._initSystem();
+    appendOutput('OK', true, 'system');
+    display.showText('');
+    return;
+  }
+  
+  await basic.execute(cmd);
+}
+
+function clearTerminal() {
+  const out = document.getElementById('terminal-output');
+  out.innerHTML = '';
+  appendOutput('Ready.', true, 'system');
+}
+
+async function runProgram() {
+  if (basic.running) { stopProgram(); return; }
+  if (basic.program.length === 0) {
+    appendOutput('No program loaded.', true, 'system');
+    return;
+  }
+  appendOutput('RUN', true, 'system');
+  document.getElementById('running-badge').classList.add('visible');
+  document.getElementById('ind-run').classList.add('active');
+  display.setIndicator('RUN', true);
+  
+  await basic.run();
+  
+  document.getElementById('running-badge').classList.remove('visible');
+  document.getElementById('ind-run').classList.remove('active');
+  display.setIndicator('RUN', false);
+  appendOutput('Ready.', true, 'system');
+}
+
+function stopProgram() {
+  if (basic.running || basic.inputMode) {
+    basic.stop();
+    document.getElementById('running-badge').classList.remove('visible');
+    document.getElementById('ind-run').classList.remove('active');
+    display.setIndicator('RUN', false);
+    appendOutput('BREAK', true, 'system');
+  }
+}
+
+// ─── Sample programs ───────────────────────────────────────────────────────
+function loadSample(name) {
+  if (!SAMPLES[name]) return;
+  
+  basic._initSystem();
+  clearTerminal();
+  appendOutput(`Loading: ${name.toUpperCase()}`, true, 'system');
+  
+  for (const line of SAMPLES[name]) {
+    basic.execute(line);
+    appendOutput(line, true, 'output');
+  }
+  
+  appendOutput('Program loaded. Press RUN or type RUN.', true, 'system');
+}
+
+// ─── Keyboard handling ─────────────────────────────────────────────────────
+function handleKeyPress(id, shifted, keyDef) {
+  // Forward to input field if not in special mode
+  const input = document.getElementById('terminal-input');
+  
+  // Update shift indicator
+  document.getElementById('ind-shift').classList.toggle('active', keyboard.shiftActive);
+  
+  // Handle specific keys
+  const keyMap = {
+    '0':'0','1':'1','2':'2','3':'3','4':'4',
+    '5':'5','6':'6','7':'7','8':'8','9':'9',
+    'DOT':'.', 'ADD':'+', 'SUB':'-', 'MUL':'*', 'DIV':'/',
+    'NEG': shifted ? '=' : function(){
+      const v=input.value;
+      if(v && !isNaN(parseFloat(v))){
+        input.value = v.startsWith('-') ? v.slice(1) : '-'+v;
+      } else {
+        input.value += '-';
+      }
+      return null;
+    },
+    'PAREN_L':'(', 'PAREN_R':')',
+    'EXP': shifted ? String(Math.PI.toPrecision(10)) : 'E',
+    'ENTER': () => { handleTerminalEnter(); return null; },
+    'BS': () => { input.value = input.value.slice(0,-1); return null; },
+    'CLS': () => { clearTerminal(); return null; },
+  };
+  
+  // Function keys
+  const funcKeys = {
+    'SIN': shifted ? 'ASN(' : 'SIN(',
+    'COS': shifted ? 'ACS(' : 'COS(',
+    'TAN': shifted ? 'ATN(' : 'TAN(',
+    'LOG': shifted ? '10^(' : 'LOG(',
+    'LN':  shifted ? 'EXP(' : 'LN(',
+    'SQR': shifted ? '^2' : 'SQR(',
+    'POW': shifted ? '^(1/' : '^(',
+    'DEG': () => { toggleAngleByKey(); return null; },
+    'MODE': () => { toggleMode(); return null; },
+    'CALC': () => {
+      if (basic.running) stopProgram();
+      else runProgram();
+      return null;
+    },
+    'MR': () => { input.value += String(basic.variables['M']||0); return null; },
+    'M+': () => {
+      try {
+        const v = basic.evalExpr(input.value||'0');
+        basic.variables['M'] = (basic.variables['M']||0) + v;
+        document.getElementById('ind-m').classList.add('active');
+        display.showText('M='+ basic._formatNum(basic.variables['M']));
+        input.value='';
+      } catch(e){}
+      return null;
+    },
+    'OFF': () => { display.showText(''); display.clear(); return null; },
+    'INS': () => { input.value += ''; return null; }, // TODO: insert mode
+  };
+  
+  const handler = funcKeys[id] || keyMap[id];
+  if (!handler) return;
+  
+  if (typeof handler === 'function') {
+    handler();
+  } else if (typeof handler === 'string') {
+    input.value += handler;
+    input.focus();
+  }
+  
+  // Visual feedback on LCD
+  if (input.value && !basic.running) {
+    display.showText(input.value.slice(-24));
+  }
+}
+
+function handlePhysicalKey(e) {
+  // Ctrl+C to stop
+  if (e.ctrlKey && e.key === 'c') {
+    stopProgram();
+    return;
+  }
+  // F5 to run
+  if (e.key === 'F5') {
+    e.preventDefault();
+    runProgram();
+  }
+}
+
+// ─── Angle mode ────────────────────────────────────────────────────────────
+function toggleAngle(mode) {
+  basic.angleMode = mode;
+  updateAngleIndicators();
+}
+
+function toggleAngleByKey() {
+  const modes = ['DEG','RAD','GRA'];
+  const idx = modes.indexOf(basic.angleMode);
+  basic.angleMode = modes[(idx+1)%3];
+  updateAngleIndicators();
+  display.showText(basic.angleMode);
+}
+
+function updateAngleIndicators() {
+  document.getElementById('ind-deg').classList.toggle('active', basic.angleMode==='DEG');
+  document.getElementById('ind-rad').classList.toggle('active', basic.angleMode==='RAD');
+  document.getElementById('ind-gra').classList.toggle('active', basic.angleMode==='GRA');
+}
+
+// ─── Mode switching ────────────────────────────────────────────────────────
+function toggleMode() {
+  const modes = ['RUN','PRO','CAL'];
+  const idx = modes.indexOf(basic.mode);
+  basic.setMode(modes[(idx+1)%3]);
+  updateModeIndicators(basic.mode);
+}
+
+function updateModeIndicators(mode) {
+  document.getElementById('ind-run').classList.toggle('active', mode==='RUN');
+  document.getElementById('ind-pro').classList.toggle('active', mode==='PRO');
+}
+
+// ─── Help panel ────────────────────────────────────────────────────────────
+function toggleHelp() {
+  const content = document.getElementById('help-content');
+  const toggle  = document.getElementById('help-toggle');
+  content.classList.toggle('visible');
+  toggle.classList.toggle('open');
+}
+
+// ─── Beep ──────────────────────────────────────────────────────────────────
+function beep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    osc.type = 'square';
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.08);
+  } catch(e) {}
+}
+
+// ─── Service Worker for offline use ────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
