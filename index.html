@@ -1847,12 +1847,14 @@ class PC1403Basic {
     line = line.trim();
     if (!line) return null;
     
-    // Check for line number
-    const lineNumMatch = line.match(/^(\d+)\s*(.*)/);
+    // A line number must be digits followed by a space or end-of-string.
+    // This prevents '1+1' being parsed as line 1 with source '+1'.
+    const lineNumMatch = line.match(/^(\d+)(\s+(.*))?$/);
     if (lineNumMatch) {
+      const src = (lineNumMatch[3] || '').trim();
       return {
         lineNum: parseInt(lineNumMatch[1]),
-        src: lineNumMatch[2].trim()
+        src
       };
     }
     // Direct execution
@@ -2630,22 +2632,28 @@ class PC1403Basic {
       try {
         await this.executeLine(parsed.src);
         if (!this.running) {
-          // Show result if it was an expression
+          // If it wasn't a recognised statement, try evaluating as expression
           const upper = parsed.src.trim().toUpperCase();
-          if (!upper.startsWith('PRINT') && !upper.startsWith('?') && 
-              !upper.startsWith('LET') && !upper.includes('=') &&
-              !upper.startsWith('FOR') && !upper.startsWith('NEXT') &&
-              !upper.startsWith('IF') && !upper.startsWith('GOTO') &&
-              !upper.startsWith('GOSUB') && !upper.startsWith('REM') &&
-              !upper.startsWith('DIM') && !upper.startsWith('DATA') &&
-              !upper.startsWith('DEG') && !upper.startsWith('RAD') && !upper.startsWith('GRA') &&
-              upper !== 'RUN' && upper !== 'NEW' && upper !== 'END' && upper !== 'STOP') {
+          const isStatement = upper.startsWith('PRINT') || upper.startsWith('?') ||
+            upper.startsWith('LET ') || upper.startsWith('FOR ') ||
+            upper.startsWith('NEXT') || upper.startsWith('IF ') ||
+            upper.startsWith('GOTO') || upper.startsWith('GOSUB') ||
+            upper.startsWith('REM') || upper.startsWith('DIM ') ||
+            upper.startsWith('DATA ') || upper.startsWith('READ ') ||
+            upper.startsWith('INPUT') || upper.startsWith('ON ') ||
+            upper === 'DEG' || upper === 'RAD' || upper === 'GRA' ||
+            upper === 'RUN' || upper === 'NEW' || upper === 'END' ||
+            upper === 'STOP' || upper === 'RETURN' || upper === 'RESTORE' ||
+            upper === 'CLS' || upper === 'BEEP' || upper === 'PAUSE' ||
+            upper.startsWith('WAIT ') || upper.startsWith('DELETE ') ||
+            upper.startsWith('LIST') || /^[A-Z]\$?\s*[\(\=]/.test(upper);
+          if (!isStatement) {
             try {
               const val = this.evalExpr(parsed.src);
               const fmt = this._formatNum(val);
               this._output(fmt);
               if (this.onPrint) this.onPrint(fmt, true);
-            } catch(e) { /* not an expression */ }
+            } catch(e) { /* not a pure expression, that's fine */ }
           }
         }
       } catch(e) {
