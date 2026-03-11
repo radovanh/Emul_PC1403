@@ -2837,7 +2837,8 @@ async function doEnterCmd(cmd) {
   if (up === 'NEW')   { basic._initSystem(); addOut('OK', true, 'sys'); display.showText(''); return; }
   await basic.execute(cmd);
   lastAns = basic.variables && basic.variables['_ANS'] || lastAns;
-  lcdSync();
+  // Do NOT call lcdSync() here — basic.execute() sets the LCD to the result.
+  // lcdSync() will fire again on the next keystroke when the user starts typing.
 }
 
 function onPhysKey(e) {
