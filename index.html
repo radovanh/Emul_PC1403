@@ -363,6 +363,7 @@ footer a:hover{color:#8bac0f}
       <button class="k k-alpha" onclick="kp('U')"><span class="kl-main">U</span></button>
       <button class="k k-alpha" onclick="kp('I')"><span class="kl-main">I</span></button>
       <button class="k k-alpha" onclick="kp('O')"><span class="kl-main">O</span></button>
+      <button class="k k-alpha" onclick="kp('P')"><span class="kl-main">P</span></button>
       <div class="kgap"></div>
       <button class="k k-del k-sm" onclick="kp('BS')"><span class="kl-main">BS</span><span class="kl-sub">DEL</span></button>
       <button class="k k-del k-sm" onclick="kp('INS')"><span class="kl-main">INS</span></button>
@@ -383,6 +384,7 @@ footer a:hover{color:#8bac0f}
       <button class="k k-alpha" onclick="kp('J')"><span class="kl-main">J</span></button>
       <button class="k k-alpha" onclick="kp('K')"><span class="kl-main">K</span></button>
       <button class="k k-alpha" onclick="kp('L')"><span class="kl-main">L</span></button>
+      <button class="k k-alpha" onclick="kp('COLON')"><span class="kl-main">:</span></button>
       <div class="kgap"></div>
       <button class="k k-ent k-lg" onclick="kp('ENTER')"><span class="kl-main">ENTER</span></button>
     </div>
@@ -390,7 +392,7 @@ footer a:hover{color:#8bac0f}
     <!-- ROW 3: QWERTY bottom + CLS -->
     <div class="krow">
       <!-- left filler matching 3 system keys width -->
-      <div style="flex:0 0 114px"></div>
+      <div style="flex:0 0 134px"></div>
       <div class="kgap"></div>
       <button class="k k-alpha" onclick="kp('Z')"><span class="kl-main">Z</span></button>
       <button class="k k-alpha" onclick="kp('X')"><span class="kl-main">X</span></button>
@@ -400,9 +402,9 @@ footer a:hover{color:#8bac0f}
       <button class="k k-alpha" onclick="kp('N')"><span class="kl-main">N</span></button>
       <button class="k k-alpha" onclick="kp('M')"><span class="kl-main">M</span></button>
       <button class="k k-alpha" onclick="kp('COMMA')"><span class="kl-main">,</span></button>
-      <button class="k k-alpha" onclick="kp('SEMI')"><span class="kl-main">;</span><span class="kl-sub">:</span></button>
+      <button class="k k-alpha" onclick="kp('DOT2')"><span class="kl-main">.</span></button>
+      <button class="k k-alpha" onclick="kp('SLASH')"><span class="kl-main">/</span></button>
       <div class="kgap"></div>
-      <button class="k k-alpha k-sm" onclick="kp('QUOT')"><span class="kl-main">"</span></button>
       <button class="k k-del k-sm" onclick="kp('CLS')"><span class="kl-main">CLS</span></button>
     </div>
 
@@ -2702,8 +2704,11 @@ function powerOn() {
     display.showText('');
     display.setCursor(0);
     setAngle('DEG');
+    basic.mode = 'CAL';
+    document.getElementById('i-run').classList.remove('on');
+    document.getElementById('i-pro').classList.remove('on');
     addOut('── SHARP PC-1403 READY ──', true, 'sys');
-    addOut('Type commands below or load a sample →', true, 'sys');
+    addOut('CAL mode — type expressions or load a sample', true, 'sys');
   }, 1400);
 }
 
@@ -2874,6 +2879,7 @@ function kp(id) {
     'A':'A','S':'S','D':'D','F':'F','G':'G','H':'H','J':'J','K':'K','L':'L',
     'Z':'Z','X':'X','C':'C','V':'V','B':'B','N':'N','M':'M',
     'SPC':' ',
+    'P':'P', 'COLON':':', 'DOT2':'.', 'SLASH':'/',
   };
 
   // Shifted overrides
@@ -2918,7 +2924,13 @@ function kp(id) {
     case 'OFF':     powered ? powerOff() : powerOn(); return;
     case 'MODE':    toggleMode(); return;
     case 'CAL':
-      shifted ? runProg() : addOut('CAL mode', true, 'sys');
+      if (shifted) {
+        runProg();
+      } else {
+        setCalcMode('CAL');
+        document.getElementById('ti').value = '';
+        lcdSync();
+      }
       return;
     case 'STOP_KEY': stopProg(); return;
     case 'DEG2':
@@ -2970,11 +2982,29 @@ function kp(id) {
 }
 
 function toggleMode() {
-  const modes = ['RUN','PRO','CAL'];
-  const i = modes.indexOf(basic.mode || 'RUN');
-  basic.mode = modes[(i+1)%3];
-  updateModeInds(basic.mode);
+  // MODE key cycles only between RUN and PRO
+  if (basic.mode === 'PRO') {
+    setCalcMode('RUN');
+  } else {
+    setCalcMode('PRO');
+  }
 }
+
+function setCalcMode(mode) {
+  basic.mode = mode;
+  const isRun = mode === 'RUN';
+  const isPro = mode === 'PRO';
+  const isCal = mode === 'CAL';
+  document.getElementById('i-run').classList.toggle('on', isRun);
+  document.getElementById('i-pro').classList.toggle('on', isPro);
+  // Show mode on LCD briefly
+  if (!isCal) {
+    display.showText(mode + ' MODE');
+    setTimeout(() => { if (!basic.running) lcdSync(); }, 800);
+  }
+  if (basic.onModeChange) basic.onModeChange(mode);
+}
+
 function updateModeInds(mode) {
   document.getElementById('i-run').classList.toggle('on', mode==='RUN');
   document.getElementById('i-pro').classList.toggle('on', mode==='PRO');
