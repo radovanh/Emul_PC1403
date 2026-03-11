@@ -2645,6 +2645,7 @@ class PC1403Basic {
           if (statementError) {
             if (this.onPrint) this.onPrint(fmt, true);
             this.display.showText(fmt);
+            this.display.setCursor(0);
           }
         } catch(e2) {
           // Not an expression either — report the original statement error if any
@@ -2691,7 +2692,7 @@ function lcdSync() {
   const val = document.getElementById('ti').value;
   const txt = val.slice(-24);
   display.showText(txt);
-  display.setCursor(txt.length < 24 ? txt.length : 23);
+  display.setCursor(txt.length > 0 ? txt.length : 0);
 }
 
 function powerOn() {
