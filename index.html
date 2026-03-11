@@ -2401,7 +2401,7 @@ class PC1403Basic {
       varName,
       end,
       step,
-      loopLine: this.lineIndex
+      loopLine: this.lineIndex + 1  // jump back to line AFTER FOR, not FOR itself
     });
   }
 
@@ -2656,6 +2656,7 @@ class PC1403Basic {
     }
   }
 }
+
 </script>
 <script>
 let display, basic;
