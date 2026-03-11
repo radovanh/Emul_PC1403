@@ -2641,14 +2641,17 @@ class PC1403Basic {
         try {
           const val = this.evalExpr(parsed.src);
           const fmt = this._formatNum(val);
-          this._output(fmt);
-          if (this.onPrint) this.onPrint(fmt, true);
+          // Only print if executeLine didn't already produce output (i.e. it threw)
+          if (statementError) {
+            if (this.onPrint) this.onPrint(fmt, true);
+            this.display.showText(fmt);
+          }
         } catch(e2) {
           // Not an expression either — report the original statement error if any
           if (statementError) {
             const msg = `Error: ${statementError.message}`;
-            this._output(msg);
             if (this.onPrint) this.onPrint(msg, true);
+            this.display.showText('Error');
           }
         }
       }
