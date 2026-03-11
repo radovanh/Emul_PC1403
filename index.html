@@ -561,9 +561,2100 @@ footer a:hover{color:#8bac0f}
   </div>
 </footer>
 
-<script src="js/sc61860.js"></script>
-<script src="js/hardware.js"></script>
-<script src="js/basic.js"></script>
+<script>
+// ===== SC61860 CPU =====
+/**
+ * SC61860 CPU Emulator
+ * Sharp PC-1403 pocket computer CPU emulation
+ * Based on ESR-H architecture by Hitachi
+ * 
+ * Architecture:
+ * - 8-bit data bus, 64KB address space
+ * - 96 bytes internal RAM (scratchpad)
+ * - Registers: A, B, I, J, K, L, M, N (8-bit)
+ * - Pointers: P, Q, R (7-bit, internal RAM)
+ * - Data pointer: DP (16-bit)
+ * - Program counter: PC (16-bit)
+ * - X, Y (16-bit RAM pointers mapped to internal RAM)
+ * - Flags: carry (c), zero (z)
+ */
+
+class SC61860 {
+  constructor(memory) {
+    this.mem = memory; // external memory interface
+
+    // Internal RAM: 96 bytes
+    this.iram = new Uint8Array(96);
+
+    // 16-bit registers (not in iram directly)
+    this.PC = 0x0000;
+    this.DP = 0x0000;
+
+    // Internal RAM pointer registers (7-bit)
+    this._P = 0x00;
+    this._Q = 0x00;
+    this._R = 0x5B; // stack starts at 0x5B
+
+    // Flags
+    this.carry = 0;
+    this.zero = 0;
+
+    // H pseudo-register
+    this.H = 0;
+
+    // Cycle counter
+    this.cycles = 0;
+
+    // Halted state
+    this.halted = false;
+
+    // I/O ports
+    this.portIA = 0x00;
+    this.portIB = 0x00;
+    this.portF0 = 0x00;
+    this.portC  = 0x00;
+
+    // Callbacks for I/O
+    this.onOutA = null;
+    this.onOutB = null;
+    this.onOutC = null;
+    this.onOutF = null;
+    this.onInA  = null;
+    this.onInB  = null;
+  }
+
+  // ─── Internal RAM register getters/setters ────────────────────────────────
+  get A()  { return this.iram[0x02]; }
+  set A(v) { this.iram[0x02] = v & 0xFF; }
+
+  get B()  { return this.iram[0x03]; }
+  set B(v) { this.iram[0x03] = v & 0xFF; }
+
+  get I()  { return this.iram[0x00]; }
+  set I(v) { this.iram[0x00] = v & 0xFF; }
+
+  get J()  { return this.iram[0x01]; }
+  set J(v) { this.iram[0x01] = v & 0xFF; }
+
+  get K()  { return this.iram[0x08]; }
+  set K(v) { this.iram[0x08] = v & 0xFF; }
+
+  get L()  { return this.iram[0x09]; }
+  set L(v) { this.iram[0x09] = v & 0xFF; }
+
+  get M()  { return this.iram[0x0A]; }
+  set M(v) { this.iram[0x0A] = v & 0xFF; }
+
+  get N()  { return this.iram[0x0B]; }
+  set N(v) { this.iram[0x0B] = v & 0xFF; }
+
+  // X = 16-bit pointer at iram[0x04..0x05]
+  get Xl() { return this.iram[0x04]; }
+  set Xl(v){ this.iram[0x04] = v & 0xFF; }
+  get Xh() { return this.iram[0x05]; }
+  set Xh(v){ this.iram[0x05] = v & 0xFF; }
+  get X()  { return (this.iram[0x05] << 8) | this.iram[0x04]; }
+  set X(v) { this.iram[0x04] = v & 0xFF; this.iram[0x05] = (v >> 8) & 0xFF; }
+
+  // Y = 16-bit pointer at iram[0x06..0x07]
+  get Yl() { return this.iram[0x06]; }
+  set Yl(v){ this.iram[0x06] = v & 0xFF; }
+  get Yh() { return this.iram[0x07]; }
+  set Yh(v){ this.iram[0x07] = v & 0xFF; }
+  get Y()  { return (this.iram[0x07] << 8) | this.iram[0x06]; }
+  set Y(v) { this.iram[0x06] = v & 0xFF; this.iram[0x07] = (v >> 8) & 0xFF; }
+
+  // P, Q, R (7-bit internal RAM pointers)
+  get P()  { return this._P & 0x7F; }
+  set P(v) { this._P = v & 0x7F; }
+  get Q()  { return this._Q & 0x7F; }
+  set Q(v) { this._Q = v & 0x7F; }
+  get R()  { return this._R & 0x7F; }
+  set R(v) { this._R = v & 0x7F; }
+
+  // ─── Memory read/write ────────────────────────────────────────────────────
+  readMem(addr) {
+    return this.mem.read(addr & 0xFFFF);
+  }
+
+  writeMem(addr, val) {
+    this.mem.write(addr & 0xFFFF, val & 0xFF);
+  }
+
+  // Internal RAM read (used by instructions referencing P,Q,R)
+  readIram(addr) {
+    addr &= 0x7F;
+    if (addr >= 0x5B && addr <= 0x5E) {
+      // I/O mapped area
+      if (addr === 0x5C) return this.portIA;
+      if (addr === 0x5D) return this.portIB;
+      if (addr === 0x5E) return this.portF0;
+    }
+    if (addr < 96) return this.iram[addr];
+    return 0;
+  }
+
+  writeIram(addr, val) {
+    addr &= 0x7F;
+    val &= 0xFF;
+    if (addr < 96) this.iram[addr] = val;
+  }
+
+  // ─── Flag helpers ─────────────────────────────────────────────────────────
+  setZero(v)  { this.zero  = (v === 0) ? 1 : 0; }
+  setCarry(v) { this.carry = (v >> 8) & 1; }
+  setFlags(v) { this.setCarry(v); this.setZero(v & 0xFF); }
+
+  // ─── Stack operations ─────────────────────────────────────────────────────
+  stackPush(val) {
+    this.writeIram(this.R, val & 0xFF);
+    this.R = (this.R - 1) & 0x7F;
+  }
+
+  stackPop() {
+    this.R = (this.R + 1) & 0x7F;
+    return this.readIram(this.R);
+  }
+
+  // Push 16-bit address (PC) onto stack
+  pushAddr(addr) {
+    this.stackPush(addr & 0xFF);         // low byte first
+    this.stackPush((addr >> 8) & 0xFF);  // high byte
+    // R now points to high byte location - 1
+  }
+
+  // Pop 16-bit address from stack
+  popAddr() {
+    const hi = this.stackPop();
+    const lo = this.stackPop();
+    return ((hi << 8) | lo) & 0xFFFF;
+  }
+
+  // ─── Fetch helpers ────────────────────────────────────────────────────────
+  fetch8() {
+    const v = this.readMem(this.PC);
+    this.PC = (this.PC + 1) & 0xFFFF;
+    return v;
+  }
+
+  fetch16() {
+    const hi = this.fetch8();
+    const lo = this.fetch8();
+    return (hi << 8) | lo;
+  }
+
+  // ─── BCD multi-byte operations ────────────────────────────────────────────
+  bcdAdd(n) {
+    let carry = 0;
+    for (let i = 0; i <= n; i++) {
+      let a = this.readIram(this.P);
+      let sum;
+      if (i === 0) sum = a + this.A + carry;
+      else         sum = a + carry;
+      // BCD adjust
+      if ((sum & 0x0F) > 9) sum += 6;
+      if ((sum >> 4) > 9)   sum += 0x60;
+      carry = (sum > 0x99) ? 1 : 0;
+      this.writeIram(this.P, sum & 0xFF);
+      this.P = (this.P - 1) & 0x7F;
+    }
+    this.carry = carry;
+    this.P = (this.P - 1) & 0x7F;
+  }
+
+  bcdSub(n) {
+    let borrow = 0;
+    for (let i = 0; i <= n; i++) {
+      let a = this.readIram(this.P);
+      let diff;
+      if (i === 0) diff = a - this.A - borrow;
+      else         diff = a - borrow;
+      if ((diff & 0x0F) > 9) diff -= 6;
+      if (diff < 0)          diff -= 0x60;
+      borrow = (diff < 0) ? 1 : 0;
+      this.writeIram(this.P, diff & 0xFF);
+      this.P = (this.P - 1) & 0x7F;
+    }
+    this.carry = borrow;
+    this.P = (this.P - 1) & 0x7F;
+  }
+
+  // ─── Main step ───────────────────────────────────────────────────────────
+  step() {
+    if (this.halted) return 1;
+
+    const opcode = this.fetch8();
+    let cycles = 2;
+
+    switch (opcode) {
+      // ── LII, LIJ, LIA, LIB ─────────────────────────────────────────────
+      case 0x00: this.I = this.fetch8(); cycles=4; break;
+      case 0x01: this.J = this.fetch8(); cycles=4; break;
+      case 0x02: { const n=this.fetch8(); this.A=n; this.H=n; cycles=4; } break;
+      case 0x03: { const n=this.fetch8(); this.B=n; cycles=4; } break;
+
+      // ── IX, IY, DX, DY ──────────────────────────────────────────────────
+      case 0x04: { // IX
+        this.X = (this.X+1)&0xFFFF; this.DP=this.X; this.Q=5; this.H=this.Xh;
+        cycles=6;
+      } break;
+      case 0x05: { // DX
+        this.X = (this.X-1)&0xFFFF; this.DP=this.X; this.Q=5; this.H=this.Xl;
+        cycles=6;
+      } break;
+      case 0x06: { // IY
+        this.Y = (this.Y+1)&0xFFFF; this.DP=this.Y; this.Q=7; this.H=this.Yh;
+        cycles=6;
+      } break;
+      case 0x07: { // DY
+        this.Y = (this.Y-1)&0xFFFF; this.DP=this.Y; this.Q=7; this.H=this.Yl;
+        cycles=6;
+      } break;
+
+      // ── MVW, EXW, MVB, EXB ──────────────────────────────────────────────
+      case 0x08: { // MVW: (Q)..(Q+I) -> (P)..(P+I)
+        for(let i=0;i<=this.I;i++){
+          this.writeIram((this.P+i)&0x7F, this.readIram((this.Q+i)&0x7F));
+        }
+        this.P=(this.P+this.I+1)&0x7F;
+        this.Q=(this.Q+this.I+1)&0x7F;
+        cycles=5+2*this.I;
+      } break;
+      case 0x09: { // EXW
+        for(let i=0;i<=this.I;i++){
+          const t=this.readIram((this.P+i)&0x7F);
+          this.writeIram((this.P+i)&0x7F, this.readIram((this.Q+i)&0x7F));
+          this.writeIram((this.Q+i)&0x7F, t);
+        }
+        this.P=(this.P+this.I+1)&0x7F;
+        this.Q=(this.Q+this.I+1)&0x7F;
+        cycles=6+3*this.I;
+      } break;
+      case 0x0A: { // MVB: (Q)..(Q+J) -> (P)..(P+J)
+        for(let i=0;i<=this.J;i++){
+          this.writeIram((this.P+i)&0x7F, this.readIram((this.Q+i)&0x7F));
+        }
+        this.P=(this.P+this.J+1)&0x7F;
+        this.Q=(this.Q+this.J+1)&0x7F;
+        cycles=5+2*this.J;
+      } break;
+      case 0x0B: { // EXB
+        for(let i=0;i<=this.J;i++){
+          const t=this.readIram((this.P+i)&0x7F);
+          this.writeIram((this.P+i)&0x7F, this.readIram((this.Q+i)&0x7F));
+          this.writeIram((this.Q+i)&0x7F, t);
+        }
+        this.P=(this.P+this.J+1)&0x7F;
+        this.Q=(this.Q+this.J+1)&0x7F;
+        cycles=6+3*this.J;
+      } break;
+
+      // ── ADN, SBN, ADW, SBW ──────────────────────────────────────────────
+      case 0x0C: { // ADN - BCD add n+1 bytes at P, using A
+        this.bcdAdd(this.I);
+        cycles=7+3*this.I;
+      } break;
+      case 0x0D: { // SBN
+        this.bcdSub(this.I);
+        cycles=7+3*this.I;
+      } break;
+      case 0x0E: { // ADW - BCD add I+1 bytes (P) + (Q)
+        let carry=0;
+        for(let i=0;i<=this.I;i++){
+          const pa=(this.P-i)&0x7F, qa=(this.Q-i)&0x7F;
+          let sum=this.readIram(pa)+this.readIram(qa)+carry;
+          if((sum&0xF)>9) sum+=6;
+          if((sum>>4)>9)  sum+=0x60;
+          carry=(sum>0x99)?1:0;
+          this.writeIram(pa,sum&0xFF);
+        }
+        this.carry=carry;
+        this.P=(this.P-this.I-1)&0x7F;
+        this.Q=(this.Q-this.I-2)&0x7F;
+        cycles=7+3*this.I;
+      } break;
+      case 0x0F: { // SBW
+        let borrow=0;
+        for(let i=0;i<=this.I;i++){
+          const pa=(this.P-i)&0x7F, qa=(this.Q-i)&0x7F;
+          let diff=this.readIram(pa)-this.readIram(qa)-borrow;
+          if((diff&0xF)>9) diff-=6;
+          if(diff<0) diff-=0x60;
+          borrow=(diff<0)?1:0;
+          this.writeIram(pa,diff&0xFF);
+        }
+        this.carry=borrow;
+        this.P=(this.P-this.I-1)&0x7F;
+        this.Q=(this.Q-this.I-2)&0x7F;
+        cycles=7+3*this.I;
+      } break;
+
+      // ── LIDP, LIDL ──────────────────────────────────────────────────────
+      case 0x10: { // LIDP nm
+        const hi=this.fetch8(), lo=this.fetch8();
+        this.DP=(hi<<8)|lo; this.H=hi;
+        cycles=8;
+      } break;
+      case 0x11: { // LIDL n
+        const n=this.fetch8();
+        this.DP=(this.DP&0xFF00)|n; this.H=n;
+        cycles=5;
+      } break;
+
+      // ── LIP, LIQ ────────────────────────────────────────────────────────
+      case 0x12: { const n=this.fetch8(); this.P=n; this.H=0; cycles=4; } break;
+      case 0x13: { const n=this.fetch8(); this.Q=n; this.H=n; cycles=4; } break;
+
+      // ── ADB, SBB ────────────────────────────────────────────────────────
+      case 0x14: { // ADB
+        let r=(this.readIram(this.P)+this.A)&0xFF;
+        this.writeIram(this.P,r);
+        let r2=(this.readIram((this.P+1)&0x7F)+this.B+this.carry);
+        this.carry=(r2>>8)&1; r2&=0xFF;
+        this.writeIram((this.P+1)&0x7F,r2);
+        this.P=(this.P+1)&0x7F;
+        this.setZero(r2);
+        cycles=5;
+      } break;
+      case 0x15: { // SBB
+        let r=this.readIram(this.P)-this.A;
+        const borrow1=(r<0)?1:0; r&=0xFF;
+        this.writeIram(this.P,r);
+        let r2=this.readIram((this.P+1)&0x7F)-this.B-borrow1;
+        this.carry=(r2<0)?1:0; r2&=0xFF;
+        this.writeIram((this.P+1)&0x7F,r2);
+        this.P=(this.P+1)&0x7F;
+        this.setZero(r2);
+        cycles=5;
+      } break;
+
+      // ── MVWD, EXWD, MVBD, EXBD ──────────────────────────────────────────
+      case 0x18: { // MVWD: (DP)..(DP+I) -> (P)..(P+I)
+        for(let i=0;i<=this.I;i++){
+          this.writeIram((this.P+i)&0x7F, this.readMem((this.DP+i)&0xFFFF));
+        }
+        this.P=(this.P+this.I+1)&0x7F;
+        this.DP=(this.DP+this.I)&0xFFFF;
+        cycles=5+4*this.I;
+      } break;
+      case 0x19: { // EXWD
+        for(let i=0;i<=this.I;i++){
+          const t=this.readIram((this.P+i)&0x7F);
+          this.writeIram((this.P+i)&0x7F, this.readMem((this.DP+i)&0xFFFF));
+          this.writeMem((this.DP+i)&0xFFFF, t);
+        }
+        this.P=(this.P+this.I+1)&0x7F;
+        this.DP=(this.DP+this.I)&0xFFFF;
+        cycles=7+6*this.I;
+      } break;
+      case 0x1A: { // MVBD
+        for(let i=0;i<=this.J;i++){
+          this.writeIram((this.P+i)&0x7F, this.readMem((this.DP+i)&0xFFFF));
+        }
+        this.P=(this.P+this.J+1)&0x7F;
+        this.DP=(this.DP+this.J)&0xFFFF;
+        cycles=5+4*this.J;
+      } break;
+      case 0x1B: { // EXBD
+        for(let i=0;i<=this.J;i++){
+          const t=this.readIram((this.P+i)&0x7F);
+          this.writeIram((this.P+i)&0x7F, this.readMem((this.DP+i)&0xFFFF));
+          this.writeMem((this.DP+i)&0xFFFF, t);
+        }
+        this.P=(this.P+this.J+1)&0x7F;
+        this.DP=(this.DP+this.J)&0xFFFF;
+        cycles=7+6*this.J;
+      } break;
+
+      // ── SRW, SLW ────────────────────────────────────────────────────────
+      case 0x1C: { // SRW: shift right by 4 bits, I+1 bytes
+        for(let i=0;i<=this.I;i++){
+          const cur=this.readIram((this.P+i)&0x7F);
+          const next=(i<this.I)?this.readIram((this.P+i+1)&0x7F):0;
+          this.writeIram((this.P+i)&0x7F, ((cur>>4)|(next<<4))&0xFF);
+        }
+        this.P=(this.P+this.I+1)&0x7F;
+        cycles=5+this.I;
+      } break;
+      case 0x1D: { // SLW: shift left by 4 bits
+        for(let i=this.I;i>=0;i--){
+          const cur=this.readIram((this.P-i)&0x7F);
+          const prev=(i>0)?this.readIram((this.P-i+1)&0x7F):0;
+          this.writeIram((this.P-i)&0x7F, ((cur<<4)|(prev>>4))&0xFF);
+        }
+        this.P=(this.P-this.I-1)&0x7F;
+        cycles=5+this.I;
+      } break;
+
+      // ── FILM, FILD ──────────────────────────────────────────────────────
+      case 0x1E: { // FILM: fill I+1 bytes at P with A
+        for(let i=0;i<=this.I;i++){
+          this.writeIram(this.P, this.A);
+          this.P=(this.P+1)&0x7F;
+        }
+        this.H=this.A;
+        cycles=5+this.I;
+      } break;
+      case 0x1F: { // FILD: fill I+1 bytes at DP with A
+        for(let i=0;i<=this.I;i++){
+          this.writeMem(this.DP, this.A);
+          this.DP=(this.DP+1)&0xFFFF;
+        }
+        cycles=4+3*this.I;
+      } break;
+
+      // ── LDP, LDQ, LDR ────────────────────────────────────────────────────
+      case 0x20: this.A=this.P; cycles=2; break;
+      case 0x21: this.A=this.Q; cycles=2; break;
+      case 0x22: this.A=this.R; cycles=2; break;
+      case 0x23: this.A=0; this.H=0; cycles=2; break; // CLRA
+
+      // ── IXL, IYS, DXL, DYS ──────────────────────────────────────────────
+      case 0x24: { // IXL: IX + load A from (DP)
+        this.X=(this.X+1)&0xFFFF; this.DP=this.X;
+        this.A=this.readMem(this.DP); this.Q=5;
+        cycles=7;
+      } break;
+      case 0x25: { // DXL
+        this.X=(this.X-1)&0xFFFF; this.DP=this.X;
+        this.A=this.readMem(this.DP); this.Q=5; this.H=this.Xl;
+        cycles=7;
+      } break;
+      case 0x26: { // IYS: IY + store A to (DP)
+        this.Y=(this.Y+1)&0xFFFF; this.DP=this.Y;
+        this.writeMem(this.DP, this.A); this.Q=7;
+        cycles=7;
+      } break;
+      case 0x27: { // DYS
+        this.Y=(this.Y-1)&0xFFFF; this.DP=this.Y;
+        this.writeMem(this.DP, this.A); this.Q=7; this.H=this.Yl;
+        cycles=7;
+      } break;
+
+      // ── JRP, JRM ─────────────────────────────────────────────────────────
+      case 0x2C: { const n=this.fetch8(); this.PC=(this.PC+1+n)&0xFFFF; cycles=7; } break;
+      case 0x2D: { const n=this.fetch8(); this.PC=(this.PC+1-n)&0xFFFF; cycles=7; } break;
+
+      // ── JRNZP, JRNZM ─────────────────────────────────────────────────────
+      case 0x28: { const n=this.fetch8(); if(!this.zero){ this.PC=(this.PC+1+n)&0xFFFF; cycles=7;} else cycles=4; } break;
+      case 0x29: { const n=this.fetch8(); if(!this.zero){ this.PC=(this.PC+1-n)&0xFFFF; cycles=7;} else cycles=4; } break;
+      case 0x2A: { const n=this.fetch8(); if(!this.carry){ this.PC=(this.PC+1+n)&0xFFFF; cycles=7;} else cycles=4; } break;
+      case 0x2B: { const n=this.fetch8(); if(!this.carry){ this.PC=(this.PC+1-n)&0xFFFF; cycles=7;} else cycles=4; } break;
+      case 0x2F: { // LOOP: (R)-1 -> (R), if c=0 jump back
+        const n=this.fetch8();
+        let cnt=this.readIram(this.R)-1;
+        this.writeIram(this.R, cnt&0xFF);
+        if((cnt&0xFF)!==0 && !this.carry){ this.PC=(this.PC+1-n)&0xFFFF; cycles=10;}
+        else { this.carry=0; cycles=7; }
+      } break;
+
+      // ── STP, STQ, STR, STH ────────────────────────────────────────────────
+      case 0x30: this.P=this.A; this.H=this.A; cycles=2; break;
+      case 0x31: this.Q=this.A; this.H=this.A; cycles=2; break;
+      case 0x32: this.R=this.A; cycles=2; break;
+      case 0x33: this.H=this.A; cycles=2; break; // STH
+
+      // ── PUSH ─────────────────────────────────────────────────────────────
+      case 0x34: this.stackPush(this.A); cycles=3; break;
+
+      // ── DATA: read I+1 bytes from internal ROM at BA -> (P) ──────────────
+      case 0x35: {
+        // For PC-1403, internal ROM is at 0x0000-0x11FF (system area)
+        // BA = (B<<8)|A pointer into internal ROM
+        const base=(this.B<<8)|this.A;
+        for(let i=0;i<=this.I;i++){
+          this.writeIram(this.P, this.readMem((base+i)&0xFFFF));
+          this.P=(this.P+1)&0x7F;
+        }
+        cycles=11+4*this.I;
+      } break;
+
+      // ── RTN ──────────────────────────────────────────────────────────────
+      case 0x37: {
+        this.PC=this.popAddr();
+        cycles=4;
+      } break;
+
+      // ── JRZP, JRZM, JRCM, JRCP ───────────────────────────────────────────
+      case 0x38: { const n=this.fetch8(); if(this.zero){ this.PC=(this.PC+1+n)&0xFFFF; cycles=7;} else cycles=4; } break;
+      case 0x39: { const n=this.fetch8(); if(this.zero){ this.PC=(this.PC+1-n)&0xFFFF; cycles=7;} else cycles=4; } break;
+      case 0x3A: { const n=this.fetch8(); if(this.carry){ this.PC=(this.PC+1+n)&0xFFFF; cycles=7;} else cycles=4; } break;
+      case 0x3B: { const n=this.fetch8(); if(this.carry){ this.PC=(this.PC+1-n)&0xFFFF; cycles=7;} else cycles=4; } break;
+
+      // ── INCI, INCJ, INCA, INCB, INCK, INCL, INCM, INCN ─────────────────
+      case 0x40: { const r=(this.I+1)&0xFF; this.I=r; this.Q=0; this.setFlags(r); cycles=4; } break;
+      case 0x41: { const r=(this.I-1)&0xFF; this.I=r; this.Q=0; this.setFlags(r); cycles=4; } break;
+      case 0x42: { const r=(this.A+1)&0xFF; this.A=r; this.Q=2; this.setFlags(r); cycles=4; } break;
+      case 0x43: { const r=(this.A-1)&0xFF; this.A=r; this.Q=2; this.setFlags(r); cycles=4; } break;
+      case 0x44: { // ADM: (P)+A -> (P)
+        const r=this.readIram(this.P)+this.A;
+        this.setFlags(r); this.writeIram(this.P,r&0xFF); cycles=3;
+      } break;
+      case 0x45: { // SBM
+        const r=this.readIram(this.P)-this.A;
+        this.setFlags(r); this.writeIram(this.P,r&0xFF); cycles=3;
+      } break;
+      case 0x46: { // ANMA
+        const r=this.readIram(this.P)&this.A;
+        this.zero=(r===0)?1:0; this.writeIram(this.P,r); cycles=3;
+      } break;
+      case 0x47: { // ORMA
+        const r=this.readIram(this.P)|this.A;
+        this.zero=(r===0)?1:0; this.writeIram(this.P,r); cycles=3;
+      } break;
+      case 0x48: { const r=(this.K+1)&0xFF; this.K=r; this.Q=8; this.setFlags(r); cycles=4; } break;
+      case 0x49: { const r=(this.K-1)&0xFF; this.K=r; this.Q=8; this.setFlags(r); cycles=4; } break;
+      case 0x4A: { const r=(this.M+1)&0xFF; this.M=r; this.Q=10; this.setFlags(r); cycles=4; } break;
+      case 0x4B: { const r=(this.M-1)&0xFF; this.M=r; this.Q=10; this.setFlags(r); cycles=4; } break;
+      case 0x4C: { // INA
+        this.A=(this.onInA)?this.onInA():this.portIA;
+        this.zero=(this.A===0)?1:0; cycles=2;
+      } break;
+      case 0x4D: cycles=2; break; // NOPW
+      case 0x4E: { const n=this.fetch8(); cycles=6+n; } break; // WAIT n
+      case 0x4F: cycles=2; break; // CUP (simplified)
+
+      // ── INCP, DECP ───────────────────────────────────────────────────────
+      case 0x50: this.P=(this.P+1)&0x7F; cycles=2; break;
+      case 0x51: this.P=(this.P-1)&0x7F; cycles=2; break;
+
+      // ── STD, MVDM, MVMP, MVMD, LDD ───────────────────────────────────────
+      case 0x52: this.writeMem(this.DP, this.A); cycles=2; break;
+      case 0x53: this.writeMem(this.DP, this.readIram(this.P)); cycles=3; break;
+      case 0x54: this.writeIram(this.P, this.readMem(this.PC+1)); cycles=3; break; // MVMP
+      case 0x55: this.writeIram(this.P, this.readMem(this.DP)); cycles=3; break;   // MVMD
+      case 0x56: { // LDPC: A <- (PC+1)
+        this.A=this.readMem(this.PC+1); cycles=3;
+      } break;
+      case 0x57: this.A=this.readMem(this.DP); cycles=3; break; // LDD
+      case 0x58: this.A=((this.A>>4)|(this.A<<4))&0xFF; cycles=2; break; // SWP
+      case 0x59: this.A=this.readIram(this.P); cycles=2; break; // LDM
+      case 0x5A: { // SL: shift left with carry
+        const c=(this.A>>7)&1;
+        this.A=((this.A<<1)|this.carry)&0xFF;
+        this.carry=c; cycles=2;
+      } break;
+      case 0x5B: { // POP
+        this.A=this.stackPop(); cycles=2;
+      } break;
+      case 0x5D: { // OUTA
+        this.portIA=this.readIram(0x5C);
+        if(this.onOutA) this.onOutA(this.portIA);
+        this.Q=0x5C; cycles=3;
+      } break;
+      case 0x5F: { // OUTF
+        this.portF0=this.readIram(0x5E);
+        if(this.onOutF) this.onOutF(this.portF0);
+        this.Q=0x5E; cycles=3;
+      } break;
+
+      // ── TSIM, ANIM, SBIM, CPIM ───────────────────────────────────────────
+      case 0x60: { const n=this.fetch8(); const r=(this.readIram(this.P)&n); this.zero=(r===0)?1:0; this.writeIram(this.P,r); cycles=4; } break; // ANIM
+      case 0x61: { const n=this.fetch8(); const r=(this.readIram(this.P)|n); this.zero=(r===0)?1:0; this.writeIram(this.P,r); cycles=4; } break; // ORIM
+      case 0x62: { const n=this.fetch8(); this.zero=((this.readIram(this.P)&n)===0)?1:0; cycles=4; } break; // TSIM
+      case 0x63: { // CPIM
+        const n=this.fetch8(); const r=this.readIram(this.P)-n;
+        this.carry=(r<0)?1:0; this.zero=((r&0xFF)===0)?1:0; cycles=4;
+      } break;
+      case 0x64: { const n=this.fetch8(); const r=(this.A&n)&0xFF; this.zero=(r===0)?1:0; this.A=r; cycles=4; } break; // ANIA
+      case 0x65: { const n=this.fetch8(); const r=(this.A|n)&0xFF; this.zero=(r===0)?1:0; this.A=r; cycles=4; } break; // ORIA
+      case 0x66: { const n=this.fetch8(); this.zero=((this.A&n)===0)?1:0; cycles=4; } break; // TSIA
+      case 0x67: { // CPIA
+        const n=this.fetch8(); const r=this.A-n;
+        this.carry=(r<0)?1:0; this.zero=((r&0xFF)===0)?1:0; cycles=4;
+      } break;
+
+      // ── ADM2 (ADIM), SBIM2 (SBIM) ────────────────────────────────────────
+      case 0x70: { const n=this.fetch8(); const r=this.readIram(this.P)+n; this.setFlags(r); this.writeIram(this.P,r&0xFF); cycles=4; } break;
+      case 0x71: { const n=this.fetch8(); const r=this.readIram(this.P)-n; this.setFlags(r); this.writeIram(this.P,r&0xFF); cycles=4; } break;
+      case 0x74: { const n=this.fetch8(); const r=this.A+n; this.setFlags(r); this.A=r&0xFF; cycles=4; } break; // ADIA
+      case 0x75: { const n=this.fetch8(); const r=this.A-n; this.setFlags(r); this.A=r&0xFF; cycles=4; } break; // SBIA
+
+      // ── HALT ─────────────────────────────────────────────────────────────
+      case 0x7B: this.halted=true; cycles=1; break;
+
+      // ── JP, CALL, RTN, JPNZ, JPNC, JPZ, JPC ─────────────────────────────
+      case 0x79: { this.PC=this.fetch16(); cycles=6; } break;
+      case 0x7A: { // PTC (prepare table call)
+        const k=this.fetch8();
+        const hi=this.fetch8(), lo=this.fetch8();
+        const retAddr=((hi<<8)|lo)&0xFFFF;
+        this.pushAddr(retAddr);
+        this.writeIram(this.R, k);
+        cycles=9;
+      } break;
+      case 0x78: { // CALL nm
+        const addr=this.fetch16();
+        this.pushAddr(this.PC);
+        this.PC=addr; cycles=8;
+      } break;
+      case 0x7C: { const addr=this.fetch16(); if(!this.zero) this.PC=addr; cycles=6; } break;
+      case 0x7D: { const addr=this.fetch16(); if(!this.carry) this.PC=addr; cycles=6; } break;
+      case 0x7E: { const addr=this.fetch16(); if(this.zero) this.PC=addr; cycles=6; } break;
+      case 0x7F: { const addr=this.fetch16(); if(this.carry) this.PC=addr; cycles=6; } break;
+
+      // ── LP n (short form: 0x80 to 0xBF) ─────────────────────────────────
+      // opcodes 0x80..0xBF: LP (P = opcode - 0x80)
+      default:
+        if (opcode >= 0x80 && opcode <= 0xBF) {
+          this.P = opcode - 0x80;
+          this.H = opcode;
+          cycles = 2;
+        }
+        // ── CAL nm (short call: 0xE0+n, with next byte as lo address) ───
+        else if (opcode >= 0xE0 && opcode <= 0xFF) {
+          const lo=this.fetch8();
+          const n=opcode&0x1F;
+          const addr=(n<<8)|lo;
+          this.pushAddr(this.PC);
+          this.PC=addr; cycles=7;
+        }
+        // ── INCB, DECB, INB, OUTB, etc. ─────────────────────────────────
+        else switch(opcode) {
+          case 0xC0: { const r=(this.J+1)&0xFF; this.J=r; this.Q=1; this.setFlags(r); cycles=4; } break; // INCJ
+          case 0xC1: { const r=(this.J-1)&0xFF; this.J=r; this.Q=1; this.setFlags(r); cycles=4; } break; // DECJ
+          case 0xC2: { const r=(this.B+1)&0xFF; this.B=r; this.Q=3; this.setFlags(r); cycles=4; } break; // INCB
+          case 0xC3: { const r=(this.B-1)&0xFF; this.B=r; this.Q=3; this.setFlags(r); cycles=4; } break; // DECB
+          case 0xC4: { const r=this.readIram(this.P)+this.A+this.carry; this.setFlags(r); this.writeIram(this.P,r&0xFF); cycles=3; } break; // ADCM
+          case 0xC5: { const r=this.readIram(this.P)-this.A-this.carry; this.setFlags(r); this.writeIram(this.P,r&0xFF); cycles=3; } break; // SBCM
+          case 0xC6: { this.zero=((this.readIram(this.P)&this.A)===0)?1:0; cycles=3; } break; // TSMA
+          case 0xC7: { const r=this.readIram(this.P)-this.A; this.carry=(r<0)?1:0; this.zero=((r&0xFF)===0)?1:0; cycles=3; } break; // CPMA
+          case 0xC8: { const r=(this.L+1)&0xFF; this.L=r; this.Q=9; this.setFlags(r); cycles=4; } break; // INCL
+          case 0xC9: { const r=(this.L-1)&0xFF; this.L=r; this.Q=9; this.setFlags(r); cycles=4; } break; // DECL
+          case 0xCA: { const r=(this.N+1)&0xFF; this.N=r; this.Q=11; this.setFlags(r); cycles=4; } break; // INCN
+          case 0xCB: { const r=(this.N-1)&0xFF; this.N=r; this.Q=11; this.setFlags(r); cycles=4; } break; // DECN
+          case 0xCC: cycles=2; break; // NOPW alt
+          case 0xCE: cycles=3; break; // NOPT
+          case 0xCC: cycles=2; break; // NOPW alt
+          case 0xD0: this.carry=1; this.zero=1; cycles=2; break; // SC
+          case 0xD1: this.carry=0; this.zero=1; cycles=2; break; // RC
+          case 0xD2: { // SR: shift right with carry
+            const c=this.A&1;
+            this.A=((this.A>>1)|(this.carry<<7))&0xFF;
+            this.carry=c; cycles=2;
+          } break;
+          case 0xD4: { // ANID
+            const n=this.fetch8(); const r=this.readMem(this.DP)&n;
+            this.writeMem(this.DP,r);
+            this.writeIram((this.R-1)&0x7F, r);
+            this.zero=(r===0)?1:0; cycles=6;
+          } break;
+          case 0xD5: { // ORID
+            const n=this.fetch8(); const r=this.readMem(this.DP)|n;
+            this.writeMem(this.DP,r);
+            this.writeIram((this.R-2)&0x7F, r);
+            this.zero=(r===0)?1:0; cycles=6;
+          } break;
+          case 0xD6: { // TSID
+            const n=this.fetch8();
+            const r=this.readMem(this.DP)&n;
+            this.writeIram((this.R-1)&0x7F, this.readMem(this.DP));
+            this.zero=(r===0)?1:0; cycles=6;
+          } break;
+          case 0xD7: { // CPID
+            const n=this.fetch8(); const r=this.readMem(this.DP)-n;
+            this.carry=(r<0)?1:0; this.zero=((r&0xFF)===0)?1:0; cycles=6;
+          } break;
+          case 0xD8: { this.writeIram(this.R,0); cycles=2; } break; // LEAVE
+          case 0xDA: { const t=this.A; this.A=this.B; this.B=t; cycles=3; } break; // EXAB
+          case 0xDB: { const t=this.A; this.A=this.readIram(this.P); this.writeIram(this.P,t); cycles=3; } break; // EXAM
+          case 0xDD: { // OUTB
+            this.portIB=this.readIram(0x5D);
+            if(this.onOutB) this.onOutB(this.portIB);
+            this.Q=0x5D; cycles=2;
+          } break;
+          case 0xDF: { // OUTC
+            this.portC=this.readIram(0x5F);
+            if(this.onOutC) this.onOutC(this.portC);
+            cycles=2;
+          } break;
+          case 0xCC: { this.A=this.portIB; this.zero=(this.A===0)?1:0; cycles=2; } break; // INB
+          // DTC - do table call
+          case 0x69: { // DTC
+            // compare A against table entries
+            let k=this.readIram(this.R); // k from PTC
+            let matched=false;
+            for(let i=0;i<k;i++){
+              const cond=this.readMem(this.PC); this.PC=(this.PC+1)&0xFFFF;
+              const hi=this.readMem(this.PC); this.PC=(this.PC+1)&0xFFFF;
+              const lo=this.readMem(this.PC); this.PC=(this.PC+1)&0xFFFF;
+              if(!matched && this.A===cond){
+                const addr=(hi<<8)|lo;
+                this.pushAddr(this.PC);
+                this.PC=addr;
+                matched=true;
+              }
+            }
+            // default entry
+            const dhi=this.readMem(this.PC); this.PC=(this.PC+1)&0xFFFF;
+            const dlo=this.readMem(this.PC); this.PC=(this.PC+1)&0xFFFF;
+            if(!matched){
+              const addr=(dhi<<8)|dlo;
+              this.pushAddr(this.PC);
+              this.PC=addr;
+            }
+            this.H=this.A;
+            this.zero=(k===0)?1:0;
+            cycles=5+7*k;
+          } break;
+          case 0x6B: { // TEST n (test against byte at DP)
+            const n=this.fetch8();
+            const testByte=this.readMem(this.DP);
+            this.zero=((testByte&n)===0)?1:0; cycles=4;
+          } break;
+          case 0x6F: cycles=2; break; // CDN (simplified - scan input)
+          case 0xCC: break; // alt NOPW
+          default:
+            // Unknown opcode - NOP
+            cycles=2;
+            break;
+        }
+        break;
+    }
+
+    this.cycles += cycles;
+    return cycles;
+  }
+
+  // Run for approximately n cycles
+  runCycles(n) {
+    let ran = 0;
+    while (ran < n && !this.halted) {
+      ran += this.step();
+    }
+    return ran;
+  }
+
+  reset() {
+    this.iram.fill(0);
+    this.PC   = 0x0000;
+    this.DP   = 0x0000;
+    this._P   = 0x00;
+    this._Q   = 0x00;
+    this._R   = 0x5B;
+    this.carry = 0;
+    this.zero  = 0;
+    this.H     = 0;
+    this.cycles= 0;
+    this.halted= false;
+    this.portIA= 0;
+    this.portIB= 0;
+    this.portF0= 0;
+    this.portC = 0;
+  }
+}
+
+// Export for module use
+
+// ===== DISPLAY + KEYBOARD =====
+/**
+ * Sharp PC-1403 Display Controller
+ * 24-character LCD display with 5×7 dot matrix characters
+ */
+class PC1403Display {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.text = '';
+    this.indicators = {
+      DEG: false, RAD: false, GRA: false,
+      RUN: false, PRO: false, SHIFT: false,
+      HYP: false, M: false, E: false, DE: false
+    };
+    this.cursorPos = -1;
+    this.blinkState = true;
+    
+    // LCD green color scheme
+    this.LCD_BG = '#8BAC0F';
+    this.LCD_DARK = '#0F380F';
+    this.LCD_MED = '#306230';
+    
+    this._setupCanvas();
+    this._startBlink();
+  }
+
+  _setupCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    // Use a safe default if the element has no layout yet
+    const w = this.canvas.clientWidth || this.canvas.width || 400;
+    const h = 56;
+    this.canvas.width  = w * dpr;
+    this.canvas.height = h * dpr;
+    this.canvas.style.width  = w + 'px';
+    this.canvas.style.height = h + 'px';
+    this.ctx.setTransform(1,0,0,1,0,0);
+    this.ctx.scale(dpr, dpr);
+    this.W = w;
+    this.H = h;
+    this.render();
+  }
+
+  _startBlink() {
+    setInterval(() => {
+      this.blinkState = !this.blinkState;
+      this.render();
+    }, 500);
+  }
+
+  showText(text) {
+    this.text = String(text).slice(0, 24);
+    this.render();
+  }
+
+  setIndicator(name, val) {
+    this.indicators[name] = val;
+    this.render();
+  }
+
+  setCursor(pos) {
+    this.cursorPos = pos;
+    this.render();
+  }
+
+  clear() {
+    this.text = '';
+    this.render();
+  }
+
+  render() {
+    const ctx = this.ctx;
+    const W = this.W, H = this.H;
+    
+    // Background
+    ctx.fillStyle = this.LCD_BG;
+    ctx.fillRect(0, 0, W, H);
+    
+    // Subtle scanline effect
+    ctx.fillStyle = 'rgba(0,0,0,0.04)';
+    for (let y = 0; y < H; y += 2) {
+      ctx.fillRect(0, y, W, 1);
+    }
+
+    // Draw indicators at top
+    this._drawIndicators(ctx, W);
+    
+    // Character area
+    const charAreaTop = 18;
+    const charH = H - charAreaTop - 4;
+    const charW = Math.floor((W - 20) / 24);
+    const startX = 10;
+    
+    for (let i = 0; i < 24; i++) {
+      const x = startX + i * charW;
+      const ch = this.text[i] || ' ';
+      const isCursor = (i === this.cursorPos && this.blinkState);
+      this._drawChar(ctx, ch, x, charAreaTop, charW, charH, isCursor);
+    }
+  }
+
+  _drawIndicators(ctx, W) {
+    const indicators = [
+      { name: 'DEG', x: 10 },
+      { name: 'RAD', x: 42 },
+      { name: 'GRA', x: 74 },
+      { name: 'SHIFT', x: 115, label: 'S' },
+      { name: 'HYP', x: 145 },
+      { name: 'M', x: 185 },
+      { name: 'E', x: W - 50 },
+      { name: 'RUN', x: W - 80 },
+      { name: 'PRO', x: W - 115 },
+    ];
+    
+    ctx.font = 'bold 8px "Courier New", monospace';
+    for (const ind of indicators) {
+      const active = this.indicators[ind.name];
+      ctx.fillStyle = active ? this.LCD_DARK : this.LCD_MED;
+      ctx.globalAlpha = active ? 1 : 0.3;
+      ctx.fillText(ind.label || ind.name, ind.x, 11);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  _drawChar(ctx, ch, x, y, w, h, cursor) {
+    // Background for cursor
+    if (cursor) {
+      ctx.fillStyle = this.LCD_DARK;
+      ctx.fillRect(x, y, w - 1, h);
+    }
+    
+    const bitmap = CHAR_BITMAPS[ch] || CHAR_BITMAPS[' '];
+    const pixW = Math.floor(w / 6);
+    const pixH = Math.floor(h / 8);
+    const offX = Math.floor((w - 5*pixW) / 2);
+    const offY = Math.floor((h - 7*pixH) / 2);
+    
+    for (let row = 0; row < 7; row++) {
+      const rowData = bitmap[row] || 0;
+      for (let col = 0; col < 5; col++) {
+        const on = (rowData >> (4 - col)) & 1;
+        if (on) {
+          ctx.fillStyle = cursor ? this.LCD_BG : this.LCD_DARK;
+          ctx.fillRect(x + offX + col*pixW, y + offY + row*pixH, pixW, pixH);
+        } else if (!cursor) {
+          // Draw dim dots for LCD look
+          ctx.fillStyle = 'rgba(15,56,15,0.15)';
+          ctx.fillRect(x + offX + col*pixW + Math.floor(pixW/4), 
+                       y + offY + row*pixH + Math.floor(pixH/4), 
+                       Math.max(1, pixW/2), Math.max(1, pixH/2));
+        }
+      }
+    }
+  }
+}
+
+// 5×7 character bitmaps (rows, each row is 5 bits)
+const CHAR_BITMAPS = {
+  ' ': [0,0,0,0,0,0,0],
+  '0': [0b01110,0b10001,0b10011,0b10101,0b11001,0b10001,0b01110],
+  '1': [0b00100,0b01100,0b00100,0b00100,0b00100,0b00100,0b01110],
+  '2': [0b01110,0b10001,0b00001,0b00010,0b00100,0b01000,0b11111],
+  '3': [0b11111,0b00010,0b00100,0b00010,0b00001,0b10001,0b01110],
+  '4': [0b00010,0b00110,0b01010,0b10010,0b11111,0b00010,0b00010],
+  '5': [0b11111,0b10000,0b11110,0b00001,0b00001,0b10001,0b01110],
+  '6': [0b00110,0b01000,0b10000,0b11110,0b10001,0b10001,0b01110],
+  '7': [0b11111,0b00001,0b00010,0b00100,0b01000,0b01000,0b01000],
+  '8': [0b01110,0b10001,0b10001,0b01110,0b10001,0b10001,0b01110],
+  '9': [0b01110,0b10001,0b10001,0b01111,0b00001,0b00010,0b01100],
+  'A': [0b01110,0b10001,0b10001,0b11111,0b10001,0b10001,0b10001],
+  'B': [0b11110,0b10001,0b10001,0b11110,0b10001,0b10001,0b11110],
+  'C': [0b01110,0b10001,0b10000,0b10000,0b10000,0b10001,0b01110],
+  'D': [0b11110,0b10001,0b10001,0b10001,0b10001,0b10001,0b11110],
+  'E': [0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b11111],
+  'F': [0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b10000],
+  'G': [0b01110,0b10001,0b10000,0b10111,0b10001,0b10001,0b01111],
+  'H': [0b10001,0b10001,0b10001,0b11111,0b10001,0b10001,0b10001],
+  'I': [0b01110,0b00100,0b00100,0b00100,0b00100,0b00100,0b01110],
+  'J': [0b00111,0b00010,0b00010,0b00010,0b00010,0b10010,0b01100],
+  'K': [0b10001,0b10010,0b10100,0b11000,0b10100,0b10010,0b10001],
+  'L': [0b10000,0b10000,0b10000,0b10000,0b10000,0b10000,0b11111],
+  'M': [0b10001,0b11011,0b10101,0b10001,0b10001,0b10001,0b10001],
+  'N': [0b10001,0b11001,0b10101,0b10011,0b10001,0b10001,0b10001],
+  'O': [0b01110,0b10001,0b10001,0b10001,0b10001,0b10001,0b01110],
+  'P': [0b11110,0b10001,0b10001,0b11110,0b10000,0b10000,0b10000],
+  'Q': [0b01110,0b10001,0b10001,0b10001,0b10101,0b10010,0b01101],
+  'R': [0b11110,0b10001,0b10001,0b11110,0b10100,0b10010,0b10001],
+  'S': [0b01110,0b10001,0b10000,0b01110,0b00001,0b10001,0b01110],
+  'T': [0b11111,0b00100,0b00100,0b00100,0b00100,0b00100,0b00100],
+  'U': [0b10001,0b10001,0b10001,0b10001,0b10001,0b10001,0b01110],
+  'V': [0b10001,0b10001,0b10001,0b10001,0b10001,0b01010,0b00100],
+  'W': [0b10001,0b10001,0b10001,0b10101,0b10101,0b11011,0b10001],
+  'X': [0b10001,0b10001,0b01010,0b00100,0b01010,0b10001,0b10001],
+  'Y': [0b10001,0b10001,0b01010,0b00100,0b00100,0b00100,0b00100],
+  'Z': [0b11111,0b00001,0b00010,0b00100,0b01000,0b10000,0b11111],
+  'a': [0b00000,0b01110,0b00001,0b01111,0b10001,0b10011,0b01101],
+  'b': [0b10000,0b10000,0b11110,0b10001,0b10001,0b10001,0b11110],
+  'c': [0b00000,0b01110,0b10001,0b10000,0b10000,0b10001,0b01110],
+  'd': [0b00001,0b00001,0b01111,0b10001,0b10001,0b10001,0b01111],
+  'e': [0b00000,0b01110,0b10001,0b11111,0b10000,0b10000,0b01110],
+  'f': [0b00110,0b01000,0b11110,0b01000,0b01000,0b01000,0b01000],
+  'g': [0b00000,0b01111,0b10001,0b10001,0b01111,0b00001,0b01110],
+  'h': [0b10000,0b10000,0b11110,0b10001,0b10001,0b10001,0b10001],
+  'i': [0b00100,0b00000,0b01100,0b00100,0b00100,0b00100,0b01110],
+  'j': [0b00010,0b00000,0b00110,0b00010,0b00010,0b10010,0b01100],
+  'k': [0b10000,0b10000,0b10010,0b10100,0b11000,0b10100,0b10010],
+  'l': [0b01100,0b00100,0b00100,0b00100,0b00100,0b00100,0b01110],
+  'm': [0b00000,0b11010,0b10101,0b10101,0b10001,0b10001,0b10001],
+  'n': [0b00000,0b11110,0b10001,0b10001,0b10001,0b10001,0b10001],
+  'o': [0b00000,0b01110,0b10001,0b10001,0b10001,0b10001,0b01110],
+  'p': [0b00000,0b11110,0b10001,0b10001,0b11110,0b10000,0b10000],
+  'q': [0b00000,0b01111,0b10001,0b10001,0b01111,0b00001,0b00001],
+  'r': [0b00000,0b01110,0b10001,0b10000,0b10000,0b10000,0b10000],
+  's': [0b00000,0b01111,0b10000,0b01110,0b00001,0b10001,0b01110],
+  't': [0b01000,0b01000,0b11110,0b01000,0b01000,0b01001,0b00110],
+  'u': [0b00000,0b10001,0b10001,0b10001,0b10001,0b10011,0b01101],
+  'v': [0b00000,0b10001,0b10001,0b10001,0b01010,0b01010,0b00100],
+  'w': [0b00000,0b10001,0b10001,0b10101,0b10101,0b01010,0b01010],
+  'x': [0b00000,0b10001,0b01010,0b00100,0b01010,0b10001,0b00000],
+  'y': [0b00000,0b10001,0b10001,0b01111,0b00001,0b10001,0b01110],
+  'z': [0b00000,0b11111,0b00010,0b00100,0b01000,0b10000,0b11111],
+  '+': [0b00000,0b00100,0b00100,0b11111,0b00100,0b00100,0b00000],
+  '-': [0b00000,0b00000,0b00000,0b11111,0b00000,0b00000,0b00000],
+  '*': [0b00000,0b10101,0b01110,0b11111,0b01110,0b10101,0b00000],
+  '/': [0b00001,0b00001,0b00010,0b00100,0b01000,0b10000,0b10000],
+  '=': [0b00000,0b00000,0b11111,0b00000,0b11111,0b00000,0b00000],
+  '<': [0b00010,0b00100,0b01000,0b10000,0b01000,0b00100,0b00010],
+  '>': [0b01000,0b00100,0b00010,0b00001,0b00010,0b00100,0b01000],
+  '.': [0b00000,0b00000,0b00000,0b00000,0b00000,0b01100,0b01100],
+  ',': [0b00000,0b00000,0b00000,0b00000,0b00110,0b00100,0b01000],
+  '!': [0b00100,0b00100,0b00100,0b00100,0b00000,0b00100,0b00100],
+  '?': [0b01110,0b10001,0b00001,0b00110,0b00100,0b00000,0b00100],
+  '(': [0b00010,0b00100,0b01000,0b01000,0b01000,0b00100,0b00010],
+  ')': [0b01000,0b00100,0b00010,0b00010,0b00010,0b00100,0b01000],
+  '[': [0b01110,0b01000,0b01000,0b01000,0b01000,0b01000,0b01110],
+  ']': [0b01110,0b00010,0b00010,0b00010,0b00010,0b00010,0b01110],
+  '_': [0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b11111],
+  '$': [0b00100,0b01111,0b10100,0b01110,0b00101,0b11110,0b00100],
+  '%': [0b11000,0b11001,0b00010,0b00100,0b01000,0b10011,0b00011],
+  '^': [0b00100,0b01010,0b10001,0b00000,0b00000,0b00000,0b00000],
+  ':': [0b00000,0b01100,0b01100,0b00000,0b01100,0b01100,0b00000],
+  ';': [0b00000,0b01100,0b01100,0b00000,0b01100,0b00100,0b01000],
+  '#': [0b01010,0b01010,0b11111,0b01010,0b11111,0b01010,0b01010],
+  '@': [0b01110,0b10001,0b10001,0b10111,0b10110,0b10000,0b01110],
+  '"': [0b01010,0b01010,0b00000,0b00000,0b00000,0b00000,0b00000],
+  "'": [0b00100,0b00100,0b00000,0b00000,0b00000,0b00000,0b00000],
+  '`': [0b01000,0b00100,0b00000,0b00000,0b00000,0b00000,0b00000],
+  '~': [0b00000,0b01101,0b10110,0b00000,0b00000,0b00000,0b00000],
+  '|': [0b00100,0b00100,0b00100,0b00100,0b00100,0b00100,0b00100],
+  '\\': [0b10000,0b10000,0b01000,0b00100,0b00010,0b00001,0b00001],
+  '{': [0b00110,0b00100,0b00100,0b01000,0b00100,0b00100,0b00110],
+  '}': [0b01100,0b00100,0b00100,0b00010,0b00100,0b00100,0b01100],
+  'E': [0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b11111],
+};
+
+// ─── Keyboard Layout ───────────────────────────────────────────────────────
+// PC-1403 keyboard layout
+const PC1403_KEYS = [
+  // Row 0
+  [
+    { id:'OFF',   label:'OFF',   w:1, cls:'key-sys' },
+    { id:'MODE',  label:'MODE',  w:1, cls:'key-sys' },
+    { id:'SHIFT', label:'SHIFT', w:1, cls:'key-shift' },
+    { id:'DEF',   label:'DEF',   w:1, cls:'key-func' },
+    { id:'CTL',   label:'CTL',   w:1, cls:'key-func' },
+  ],
+  // Row 1
+  [
+    { id:'CALC',  label:'CAL',   w:1, cls:'key-sys',  sub:'RUN' },
+    { id:'DEG',   label:'DEG',   w:1, cls:'key-func', sub:'HYP' },
+    { id:'SIN',   label:'SIN',   w:1, cls:'key-func', sub:'ASN' },
+    { id:'COS',   label:'COS',   w:1, cls:'key-func', sub:'ACS' },
+    { id:'TAN',   label:'TAN',   w:1, cls:'key-func', sub:'ATN' },
+  ],
+  // Row 2
+  [
+    { id:'M+',    label:'M+',    w:1, cls:'key-func', sub:'M-' },
+    { id:'LOG',   label:'log',   w:1, cls:'key-func', sub:'10x' },
+    { id:'LN',    label:'ln',    w:1, cls:'key-func', sub:'ex' },
+    { id:'SQR',   label:'√',     w:1, cls:'key-func', sub:'x²' },
+    { id:'POW',   label:'xʸ',    w:1, cls:'key-func', sub:'ʸ√x' },
+  ],
+  // Row 3
+  [
+    { id:'MR',    label:'MR',    w:1, cls:'key-func', sub:'MC' },
+    { id:'PAREN_L', label:'(',   w:1, cls:'key-num' },
+    { id:'PAREN_R', label:')',   w:1, cls:'key-num' },
+    { id:'REC',   label:'→r,θ', w:1, cls:'key-func', sub:'→x,y' },
+    { id:'EXP',   label:'EXP',   w:1, cls:'key-num', sub:'π' },
+  ],
+  // Row 4
+  [
+    { id:'BS',    label:'DEL',   w:1, cls:'key-edit' },
+    { id:'7',     label:'7',     w:1, cls:'key-num',  sub:'&' },
+    { id:'8',     label:'8',     w:1, cls:'key-num',  sub:'\'' },
+    { id:'9',     label:'9',     w:1, cls:'key-num',  sub:'(' },
+    { id:'DIV',   label:'÷',     w:1, cls:'key-op' },
+  ],
+  // Row 5
+  [
+    { id:'CLS',   label:'CLS',   w:1, cls:'key-edit' },
+    { id:'4',     label:'4',     w:1, cls:'key-num',  sub:'$' },
+    { id:'5',     label:'5',     w:1, cls:'key-num',  sub:'%' },
+    { id:'6',     label:'6',     w:1, cls:'key-num',  sub:')' },
+    { id:'MUL',   label:'×',     w:1, cls:'key-op' },
+  ],
+  // Row 6
+  [
+    { id:'INS',   label:'INS',   w:1, cls:'key-edit' },
+    { id:'1',     label:'1',     w:1, cls:'key-num',  sub:'!' },
+    { id:'2',     label:'2',     w:1, cls:'key-num',  sub:'"' },
+    { id:'3',     label:'3',     w:1, cls:'key-num',  sub:'#' },
+    { id:'SUB',   label:'-',     w:1, cls:'key-op' },
+  ],
+  // Row 7
+  [
+    { id:'ENTER', label:'ENT',   w:1, cls:'key-enter' },
+    { id:'0',     label:'0',     w:1, cls:'key-num',  sub:'@' },
+    { id:'DOT',   label:'.',     w:1, cls:'key-num',  sub:',' },
+    { id:'NEG',   label:'+/-',   w:1, cls:'key-num',  sub:'=' },
+    { id:'ADD',   label:'+',     w:1, cls:'key-op' },
+  ],
+];
+
+class PC1403Keyboard {
+  constructor(container, onKey) {
+    this.container = container;
+    this.onKey = onKey;
+    this.shiftActive = false;
+    this._build();
+  }
+
+  _build() {
+    this.container.innerHTML = '';
+    this.container.className = 'keyboard';
+    
+    for (const row of PC1403_KEYS) {
+      const rowEl = document.createElement('div');
+      rowEl.className = 'key-row';
+      
+      for (const key of row) {
+        const btn = document.createElement('button');
+        btn.className = `key ${key.cls || ''}`;
+        btn.dataset.keyId = key.id;
+        
+        const mainLabel = document.createElement('span');
+        mainLabel.className = 'key-main';
+        mainLabel.textContent = key.label;
+        btn.appendChild(mainLabel);
+        
+        if (key.sub) {
+          const subLabel = document.createElement('span');
+          subLabel.className = 'key-sub';
+          subLabel.textContent = key.sub;
+          btn.appendChild(subLabel);
+        }
+        
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          this._handleKey(key.id, key);
+        });
+        
+        // Touch support
+        btn.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          btn.classList.add('pressed');
+        }, { passive: false });
+        btn.addEventListener('touchend', (e) => {
+          e.preventDefault();
+          btn.classList.remove('pressed');
+          this._handleKey(key.id, key);
+        }, { passive: false });
+        
+        rowEl.appendChild(btn);
+      }
+      this.container.appendChild(rowEl);
+    }
+  }
+
+  _handleKey(id, key) {
+    if (id === 'SHIFT') {
+      this.shiftActive = !this.shiftActive;
+      this.container.classList.toggle('shifted', this.shiftActive);
+      return;
+    }
+    
+    const isShifted = this.shiftActive;
+    if (isShifted) {
+      this.shiftActive = false;
+      this.container.classList.remove('shifted');
+    }
+    
+    if (this.onKey) this.onKey(id, isShifted, key);
+  }
+
+  setShift(val) {
+    this.shiftActive = val;
+    this.container.classList.toggle('shifted', val);
+  }
+}
+
+// ===== BASIC INTERPRETER =====
+/**
+ * Sharp PC-1403 System Emulator
+ * 
+ * The PC-1403 ROM is not publicly available. This module implements
+ * a high-level emulation of the PC-1403's BASIC interpreter and 
+ * system software, providing full BASIC functionality without requiring
+ * the actual ROM binary.
+ * 
+ * Supported BASIC commands and functions matching the real PC-1403.
+ */
+
+class PC1403Basic {
+  constructor(display, keyboard) {
+    this.display = display;   // Display controller
+    this.keyboard = keyboard; // Keyboard controller
+    
+    // System RAM: 8KB (6863 bytes usable)
+    this.ram = new Uint8Array(8192);
+    
+    // BASIC program storage
+    this.program = [];        // Array of {lineNum, tokens}
+    this.variables = {};      // Variable storage
+    this.arrays = {};         // Array storage
+    this.stringVars = {};     // String variables (name$)
+    
+    // Execution state
+    this.running = false;
+    this.currentLine = 0;
+    this.lineIndex = 0;
+    this.stack = [];          // FOR..NEXT, GOSUB stack
+    this.dataList = [];       // DATA statement values
+    this.dataPtr = 0;
+    
+    // Calculator mode
+    this.calcMode = false;
+    
+    // Current mode: 'PRO' (program), 'RUN', 'CAL'
+    this.mode = 'RUN';
+    
+    // Display buffer
+    this.displayText = '';
+    this.cursorPos = 0;
+    this.cursorVisible = true;
+    this.cursorBlink = null;
+    
+    // Input buffer
+    this.inputBuffer = '';
+    this.inputMode = false;
+    this.inputCallback = null;
+    
+    // Output callback
+    this.onPrint = null;
+    this.onBeep = null;
+    this.onModeChange = null;
+    
+    // Math precision (10 significant digits like real PC-1403)
+    this.PRECISION = 10;
+
+    // Angle mode: 'DEG', 'RAD', 'GRA'
+    this.angleMode = 'DEG';
+    
+    // Error handling
+    this.lastError = '';
+    
+    this._initSystem();
+  }
+
+  _initSystem() {
+    this.variables = {};
+    this.arrays = {};
+    this.stringVars = {};
+    this.program = [];
+    this.stack = [];
+    this.dataList = [];
+    this.dataPtr = 0;
+    this.running = false;
+  }
+
+  // ─── Mode management ──────────────────────────────────────────────────────
+  setMode(mode) {
+    this.mode = mode;
+    if (this.onModeChange) this.onModeChange(mode);
+    if (mode === 'PRO') {
+      this.display.showText('PRO');
+    } else if (mode === 'CAL') {
+      this.calcMode = true;
+      this.display.showText('');
+    } else {
+      this.calcMode = false;
+    }
+  }
+
+  // ─── BASIC line parsing ───────────────────────────────────────────────────
+  tokenizeLine(line) {
+    line = line.trim();
+    if (!line) return null;
+    
+    // Check for line number
+    const lineNumMatch = line.match(/^(\d+)\s*(.*)/);
+    if (lineNumMatch) {
+      return {
+        lineNum: parseInt(lineNumMatch[1]),
+        src: lineNumMatch[2].trim()
+      };
+    }
+    // Direct execution
+    return { lineNum: -1, src: line };
+  }
+
+  // Add/replace line in program
+  addLine(lineNum, src) {
+    // Remove existing line
+    this.program = this.program.filter(l => l.lineNum !== lineNum);
+    if (src.trim()) {
+      this.program.push({ lineNum, src });
+    }
+    // Sort by line number
+    this.program.sort((a,b) => a.lineNum - b.lineNum);
+  }
+
+  // ─── Expression evaluator ─────────────────────────────────────────────────
+  evalExpr(expr) {
+    expr = expr.trim();
+    if (!expr) return 0;
+    
+    // Parse comparison operators
+    for (const op of ['>=','<=','<>','!=','>','<','=']) {
+      const idx = this._findOperator(expr, op);
+      if (idx !== -1) {
+        const left  = this.evalExpr(expr.slice(0, idx));
+        const right = this.evalExpr(expr.slice(idx + op.length));
+        switch(op) {
+          case '=':  return (Math.abs(left - right) < 1e-10) ? 1 : 0;
+          case '<>': case '!=': return (Math.abs(left - right) >= 1e-10) ? 1 : 0;
+          case '>':  return left > right ? 1 : 0;
+          case '<':  return left < right ? 1 : 0;
+          case '>=': return left >= right ? 1 : 0;
+          case '<=': return left <= right ? 1 : 0;
+        }
+      }
+    }
+
+    // OR / AND (BASIC logical)
+    for (const op of [' OR ', ' AND ']) {
+      const idx = expr.toUpperCase().indexOf(op);
+      if (idx !== -1) {
+        const left  = this.evalExpr(expr.slice(0, idx));
+        const right = this.evalExpr(expr.slice(idx + op.length));
+        if (op.trim() === 'OR')  return (left !== 0 || right !== 0) ? 1 : 0;
+        if (op.trim() === 'AND') return (left !== 0 && right !== 0) ? 1 : 0;
+      }
+    }
+
+    // NOT
+    if (expr.toUpperCase().startsWith('NOT ')) {
+      return this.evalExpr(expr.slice(4)) === 0 ? 1 : 0;
+    }
+    
+    // Addition/subtraction (lowest precedence of arithmetic)
+    const addIdx = this._findOperator(expr, '+', '-');
+    if (addIdx !== -1) {
+      const op = expr[addIdx];
+      const left  = this.evalExpr(expr.slice(0, addIdx));
+      const right = this.evalExpr(expr.slice(addIdx + 1));
+      return op === '+' ? left + right : left - right;
+    }
+    
+    // Multiplication/division
+    const mulIdx = this._findOperator(expr, '*', '/');
+    if (mulIdx !== -1) {
+      const op = expr[mulIdx];
+      const left  = this.evalExpr(expr.slice(0, mulIdx));
+      const right = this.evalExpr(expr.slice(mulIdx + 1));
+      if (op === '*') return left * right;
+      if (right === 0) throw new Error('Division by zero');
+      return left / right;
+    }
+
+    // Power
+    const powIdx = this._findOperator(expr, '^');
+    if (powIdx !== -1) {
+      const left  = this.evalExpr(expr.slice(0, powIdx));
+      const right = this.evalExpr(expr.slice(powIdx + 1));
+      return Math.pow(left, right);
+    }
+    
+    // Unary minus
+    if (expr.startsWith('-')) {
+      return -this.evalExpr(expr.slice(1));
+    }
+    
+    // Parentheses
+    if (expr.startsWith('(') && expr.endsWith(')')) {
+      return this.evalExpr(expr.slice(1, -1));
+    }
+
+    // Functions
+    const funcMatch = expr.match(/^([A-Z][A-Z0-9]*)\s*\((.+)\)$/i);
+    if (funcMatch) {
+      return this._evalFunc(funcMatch[1].toUpperCase(), funcMatch[2]);
+    }
+    
+    // Array access: A(n) or A(n,m)
+    const arrMatch = expr.match(/^([A-Z])\s*\((.+)\)$/i);
+    if (arrMatch) {
+      return this._getArrayVal(arrMatch[1].toUpperCase(), arrMatch[2]);
+    }
+    
+    // Number literal
+    const num = parseFloat(expr);
+    if (!isNaN(num)) return num;
+    
+    // Variable
+    const varName = expr.toUpperCase().trim();
+    if (/^[A-Z]$/.test(varName)) {
+      return this.variables[varName] || 0;
+    }
+    
+    throw new Error(`Syntax error: ${expr}`);
+  }
+
+  _toAngle(v) {
+    if (this.angleMode === 'DEG') return v * Math.PI / 180;
+    if (this.angleMode === 'GRA') return v * Math.PI / 200;
+    return v;
+  }
+  _fromAngle(v) {
+    if (this.angleMode === 'DEG') return v * 180 / Math.PI;
+    if (this.angleMode === 'GRA') return v * 200 / Math.PI;
+    return v;
+  }
+
+  _evalFunc(name, argsStr) {
+    const args = this._splitArgs(argsStr).map(a => this.evalExpr(a));
+    const v = args[0];
+    switch(name) {
+      case 'SIN':   return Math.sin(this._toAngle(v));
+      case 'COS':   return Math.cos(this._toAngle(v));
+      case 'TAN':   return Math.tan(this._toAngle(v));
+      case 'ASN':   return this._fromAngle(Math.asin(v));
+      case 'ACS':   return this._fromAngle(Math.acos(v));
+      case 'ATN':   return this._fromAngle(Math.atan(v));
+      case 'ATN2':  return this._fromAngle(Math.atan2(v, args[1]));
+      case 'LOG':   if(v<=0) throw new Error('Math error'); return Math.log10(v);
+      case 'LN':    if(v<=0) throw new Error('Math error'); return Math.log(v);
+      case 'EXP':   return Math.exp(v);
+      case 'SQR':   if(v<0)  throw new Error('Math error'); return Math.sqrt(v);
+      case 'ABS':   return Math.abs(v);
+      case 'INT':   return Math.floor(v);
+      case 'SGN':   return v>0?1:v<0?-1:0;
+      case 'RND':   return Math.random();
+      case 'FRAC':  return v - Math.floor(v);
+      case 'PI':    return Math.PI;
+      case 'DEG':   return v * 180 / Math.PI;
+      case 'DMS':   { // degrees to D.MMSS format
+        const d=Math.floor(Math.abs(v));
+        const mf=(Math.abs(v)-d)*60;
+        const m=Math.floor(mf);
+        const s=(mf-m)*60;
+        return (v<0?-1:1)*(d+m/100+s/10000);
+      }
+      case 'CUR':   return v; // cursor position (simplified)
+      default:
+        throw new Error(`Unknown function: ${name}`);
+    }
+  }
+
+  _splitArgs(str) {
+    const args = [];
+    let depth = 0, start = 0;
+    for (let i = 0; i < str.length; i++) {
+      if (str[i] === '(') depth++;
+      else if (str[i] === ')') depth--;
+      else if (str[i] === ',' && depth === 0) {
+        args.push(str.slice(start, i).trim());
+        start = i + 1;
+      }
+    }
+    args.push(str.slice(start).trim());
+    return args;
+  }
+
+  _getArrayVal(name, idxStr) {
+    const indices = this._splitArgs(idxStr).map(s => Math.floor(this.evalExpr(s)));
+    const key = indices.join(',');
+    return (this.arrays[name] || {})[key] || 0;
+  }
+
+  _setArrayVal(name, idxStr, val) {
+    const indices = this._splitArgs(idxStr).map(s => Math.floor(this.evalExpr(s)));
+    const key = indices.join(',');
+    if (!this.arrays[name]) this.arrays[name] = {};
+    this.arrays[name][key] = val;
+  }
+
+  // Find operator at depth 0, right-to-left (for left-associativity)
+  _findOperator(expr, ...ops) {
+    let depth = 0;
+    // Scan right to left to handle left-associativity
+    for (let i = expr.length - 1; i >= 0; i--) {
+      const c = expr[i];
+      if (c === ')') depth++;
+      else if (c === '(') depth--;
+      if (depth !== 0) continue;
+      for (const op of ops) {
+        if (expr.slice(i, i + op.length) === op) {
+          // Avoid treating leading unary minus as binary
+          if ((op === '-' || op === '+') && i === 0) continue;
+          // Avoid ** (power with ^)
+          return i;
+        }
+      }
+    }
+    return -1;
+  }
+
+  // ─── String evaluator ─────────────────────────────────────────────────────
+  evalString(expr) {
+    expr = expr.trim();
+    // Concatenation
+    const catIdx = this._findOperator(expr, '+');
+    if (catIdx !== -1) {
+      return this.evalString(expr.slice(0, catIdx)) + this.evalString(expr.slice(catIdx + 1));
+    }
+    // String literal
+    if (expr.startsWith('"') && expr.endsWith('"')) return expr.slice(1, -1);
+    // String variable
+    if (/^[A-Z]\$$/i.test(expr)) return this.stringVars[expr.toUpperCase()] || '';
+    // String functions
+    const m = expr.match(/^(STR\$|CHR\$|LEFT\$|RIGHT\$|MID\$|INSTR|LEN|VAL|ASC)\((.+)\)$/i);
+    if (m) return this._evalStrFunc(m[1].toUpperCase(), m[2]);
+    return '';
+  }
+
+  _evalStrFunc(name, argsStr) {
+    const rawArgs = this._splitArgs(argsStr);
+    switch(name) {
+      case 'STR$': return String(this._formatNum(this.evalExpr(rawArgs[0])));
+      case 'CHR$': return String.fromCharCode(Math.floor(this.evalExpr(rawArgs[0])));
+      case 'LEFT$': return this.evalString(rawArgs[0]).slice(0, Math.floor(this.evalExpr(rawArgs[1])));
+      case 'RIGHT$': { const s=this.evalString(rawArgs[0]); return s.slice(s.length-Math.floor(this.evalExpr(rawArgs[1]))); }
+      case 'MID$': { const s=this.evalString(rawArgs[0]); const p=Math.floor(this.evalExpr(rawArgs[1]))-1; const l=rawArgs[2]?Math.floor(this.evalExpr(rawArgs[2])):undefined; return s.substr(p,l); }
+      case 'LEN': return this.evalString(rawArgs[0]).length;
+      case 'VAL': return parseFloat(this.evalString(rawArgs[0]))||0;
+      case 'ASC': { const s=this.evalString(rawArgs[0]); return s.length?s.charCodeAt(0):0; }
+      case 'INSTR': { const s=this.evalString(rawArgs[0]); const sub=this.evalString(rawArgs[1]); return s.indexOf(sub)+1; }
+      default: return '';
+    }
+  }
+
+  // ─── Number formatting (PC-1403 style: 10 significant digits) ────────────
+  _formatNum(n) {
+    if (!isFinite(n)) return n > 0 ? '1E+99' : '-1E+99';
+    if (n === 0) return '0';
+    
+    const abs = Math.abs(n);
+    const sign = n < 0 ? '-' : '';
+    
+    // Use scientific notation for very large or very small numbers
+    if (abs >= 1e10 || (abs > 0 && abs < 1e-9)) {
+      let s = n.toExponential(9);
+      // Clean up: remove trailing zeros
+      s = s.replace(/\.?0+e/, 'e').replace('e+', 'E+').replace('e-', 'E-');
+      return s;
+    }
+    
+    // Fixed notation
+    let s = n.toPrecision(10);
+    // Remove trailing zeros after decimal
+    if (s.includes('.')) {
+      s = s.replace(/0+$/, '').replace(/\.$/, '');
+    }
+    return s;
+  }
+
+  // ─── Statement executor ───────────────────────────────────────────────────
+  async executeLine(src) {
+    src = src.trim();
+    if (!src) return;
+    
+    // Handle multiple statements separated by :
+    const stmts = this._splitStatements(src);
+    for (const stmt of stmts) {
+      await this._execStatement(stmt.trim());
+      if (!this.running && stmts.length > 1) break;
+    }
+  }
+
+  _splitStatements(src) {
+    const stmts = [];
+    let depth = 0, start = 0, inStr = false;
+    for (let i = 0; i < src.length; i++) {
+      if (src[i] === '"') inStr = !inStr;
+      if (inStr) continue;
+      if (src[i] === '(') depth++;
+      else if (src[i] === ')') depth--;
+      else if (src[i] === ':' && depth === 0) {
+        stmts.push(src.slice(start, i));
+        start = i + 1;
+      }
+    }
+    stmts.push(src.slice(start));
+    return stmts;
+  }
+
+  async _execStatement(stmt) {
+    if (!stmt) return;
+    
+    const upper = stmt.toUpperCase();
+    
+    // PRINT / PRINT USING
+    if (upper.startsWith('PRINT') || upper.startsWith('?')) {
+      const rest = upper.startsWith('PRINT') ? stmt.slice(5).trim() : stmt.slice(1).trim();
+      await this._execPrint(rest);
+      return;
+    }
+    
+    // LET or assignment
+    if (upper.startsWith('LET ')) {
+      await this._execLet(stmt.slice(4).trim()); return;
+    }
+    
+    // Assignment without LET: VAR = EXPR or VAR(idx) = EXPR
+    if (/^[A-Za-z](\(|[A-Za-z0-9]*\$?)?\s*=/.test(stmt)) {
+      await this._execLet(stmt); return;
+    }
+    
+    // Control flow
+    if (upper.startsWith('GOTO '))   { this._execGoto(stmt.slice(5).trim()); return; }
+    if (upper.startsWith('GOSUB '))  { this._execGosub(stmt.slice(6).trim()); return; }
+    if (upper === 'RETURN')          { this._execReturn(); return; }
+    if (upper.startsWith('IF '))     { await this._execIf(stmt.slice(3)); return; }
+    if (upper.startsWith('FOR '))    { this._execFor(stmt.slice(4).trim()); return; }
+    if (upper.startsWith('NEXT '))   { this._execNext(stmt.slice(5).trim()); return; }
+    if (upper === 'END' || upper === 'STOP') { this.running = false; return; }
+    
+    // I/O
+    if (upper.startsWith('INPUT'))   { await this._execInput(stmt.slice(5).trim()); return; }
+    if (upper.startsWith('READ '))   { this._execRead(stmt.slice(5).trim()); return; }
+    if (upper.startsWith('DATA '))   { /* parsed at load time */ return; }
+    if (upper === 'RESTORE')         { this.dataPtr = 0; return; }
+    
+    // Program control
+    if (upper.startsWith('DIM '))    { this._execDim(stmt.slice(4).trim()); return; }
+    if (upper === 'NEW')             { this._initSystem(); this.display.showText(''); return; }
+    if (upper === 'RUN')             { await this.run(); return; }
+    if (upper.startsWith('LIST'))    { this._execList(stmt.slice(4).trim()); return; }
+    if (upper.startsWith('DELETE ')) { this._execDelete(stmt.slice(7).trim()); return; }
+    
+    // System
+    if (upper === 'CLS' || upper === 'CLEAR') { this.display.clear(); return; }
+    if (upper.startsWith('BEEP'))    { if(this.onBeep) this.onBeep(); return; }
+    if (upper === 'DEG')             { this.angleMode = 'DEG'; return; }
+    if (upper === 'RAD')             { this.angleMode = 'RAD'; return; }
+    if (upper === 'GRA')             { this.angleMode = 'GRA'; return; }
+    if (upper.startsWith('WAIT '))   { await this._sleep(this.evalExpr(stmt.slice(5))*100); return; }
+    if (upper === 'PAUSE')           { await this._sleep(500); return; }
+    
+    // REM / '
+    if (upper.startsWith('REM') || stmt.startsWith("'")) return;
+    
+    // ON .. GOTO/GOSUB
+    if (upper.startsWith('ON '))     { await this._execOn(stmt.slice(3)); return; }
+
+    throw new Error(`Unknown statement: ${stmt}`);
+  }
+
+  async _execPrint(rest) {
+    if (!rest) {
+      this._output('');
+      return;
+    }
+    
+    let output = '';
+    let newline = true;
+    
+    // Split by ; and ,
+    const parts = this._splitPrintParts(rest);
+    
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i].trim();
+      if (part === '') { newline = false; continue; }
+      if (part === ';') { newline = false; continue; }
+      if (part === ',') { output += '\t'; newline = false; continue; }
+      
+      try {
+        if (part.startsWith('"') || /^[A-Z]\$/i.test(part) || 
+            part.includes('STR$') || part.includes('CHR$')) {
+          output += this.evalString(part);
+        } else {
+          output += this._formatNum(this.evalExpr(part));
+        }
+      } catch(e) {
+        output += part;
+      }
+      
+      // Check separator after this value
+      if (i + 1 < parts.length) {
+        const sep = parts[i + 1];
+        if (sep === ';') { newline = false; i++; }
+        else if (sep === ',') { output += '\t'; newline = false; i++; }
+        else newline = true;
+      }
+    }
+    
+    this._output(output, newline);
+  }
+
+  _splitPrintParts(rest) {
+    const parts = [];
+    let i = 0;
+    while (i < rest.length) {
+      if (rest[i] === ';' || rest[i] === ',') {
+        parts.push(rest[i]);
+        i++;
+      } else if (rest[i] === '"') {
+        let j = i + 1;
+        while (j < rest.length && rest[j] !== '"') j++;
+        parts.push(rest.slice(i, j+1));
+        i = j + 1;
+      } else {
+        // find next ; or ,
+        let j = i;
+        let depth = 0;
+        while (j < rest.length) {
+          if (rest[j] === '(') depth++;
+          else if (rest[j] === ')') depth--;
+          else if ((rest[j] === ';' || rest[j] === ',') && depth === 0) break;
+          j++;
+        }
+        if (j > i) parts.push(rest.slice(i, j).trim());
+        i = j;
+      }
+    }
+    return parts;
+  }
+
+  _output(text, newline = true) {
+    if (this.onPrint) this.onPrint(text, newline);
+    this.display.showText(text);
+  }
+
+  async _execLet(stmt) {
+    // Handle array assignment: A(i) = expr  or  A(i,j) = expr
+    const arrAssign = stmt.match(/^([A-Z])\s*\(([^)]+)\)\s*=\s*(.+)$/i);
+    if (arrAssign) {
+      const val = this.evalExpr(arrAssign[3]);
+      this._setArrayVal(arrAssign[1].toUpperCase(), arrAssign[2], val);
+      return;
+    }
+    // String assignment: A$ = expr
+    const strAssign = stmt.match(/^([A-Z]\$)\s*=\s*(.+)$/i);
+    if (strAssign) {
+      this.stringVars[strAssign[1].toUpperCase()] = this.evalString(strAssign[2]);
+      return;
+    }
+    // Numeric: VAR = expr
+    const assign = stmt.match(/^([A-Z])\s*=\s*(.+)$/i);
+    if (assign) {
+      const val = this.evalExpr(assign[2]);
+      this.variables[assign[1].toUpperCase()] = val;
+      return;
+    }
+    throw new Error(`Assignment syntax: ${stmt}`);
+  }
+
+  _execGoto(lineStr) {
+    const lineNum = Math.floor(this.evalExpr(lineStr));
+    const idx = this.program.findIndex(l => l.lineNum === lineNum);
+    if (idx === -1) throw new Error(`Line ${lineNum} not found`);
+    this.lineIndex = idx;
+    this._jumped = true;
+  }
+
+  _execGosub(lineStr) {
+    const lineNum = Math.floor(this.evalExpr(lineStr));
+    const idx = this.program.findIndex(l => l.lineNum === lineNum);
+    if (idx === -1) throw new Error(`Line ${lineNum} not found`);
+    this.stack.push({ type: 'GOSUB', returnIdx: this.lineIndex + 1 });
+    this.lineIndex = idx;
+    this._jumped = true;
+  }
+
+  _execReturn() {
+    const frame = this.stack.findLast(f => f.type === 'GOSUB');
+    if (!frame) throw new Error('RETURN without GOSUB');
+    while (this.stack[this.stack.length-1] !== frame) this.stack.pop();
+    this.stack.pop();
+    this.lineIndex = frame.returnIdx;
+    this._jumped = true;
+  }
+
+  async _execIf(rest) {
+    // IF condition THEN ... [ELSE ...]
+    const thenIdx = rest.toUpperCase().indexOf(' THEN ');
+    if (thenIdx === -1) {
+      // IF cond GOTO linenum
+      const gotoIdx = rest.toUpperCase().indexOf(' GOTO ');
+      if (gotoIdx !== -1) {
+        const cond = this.evalExpr(rest.slice(0, gotoIdx));
+        if (cond !== 0) {
+          this._execGoto(rest.slice(gotoIdx + 6).trim());
+        }
+        return;
+      }
+      throw new Error('IF without THEN');
+    }
+    
+    const condStr = rest.slice(0, thenIdx);
+    const afterThen = rest.slice(thenIdx + 6);
+    
+    const elseIdx = afterThen.toUpperCase().indexOf(' ELSE ');
+    const thenPart = elseIdx !== -1 ? afterThen.slice(0, elseIdx) : afterThen;
+    const elsePart = elseIdx !== -1 ? afterThen.slice(elseIdx + 6) : '';
+    
+    const cond = this.evalExpr(condStr);
+    
+    if (cond !== 0) {
+      // THEN can be a line number (GOTO) or a statement
+      const thenTrim = thenPart.trim();
+      if (/^\d+$/.test(thenTrim)) {
+        this._execGoto(thenTrim);
+      } else {
+        await this.executeLine(thenPart);
+      }
+    } else if (elsePart) {
+      const elseTrim = elsePart.trim();
+      if (/^\d+$/.test(elseTrim)) {
+        this._execGoto(elseTrim);
+      } else {
+        await this.executeLine(elsePart);
+      }
+    }
+  }
+
+  _execFor(rest) {
+    // FOR var = start TO end [STEP step]
+    const m = rest.match(/^([A-Z])\s*=\s*(.+?)\s+TO\s+(.+?)(?:\s+STEP\s+(.+))?$/i);
+    if (!m) throw new Error(`FOR syntax: ${rest}`);
+    
+    const varName = m[1].toUpperCase();
+    const start   = this.evalExpr(m[2]);
+    const end     = this.evalExpr(m[3]);
+    const step    = m[4] ? this.evalExpr(m[4]) : 1;
+    
+    this.variables[varName] = start;
+    this.stack.push({
+      type: 'FOR',
+      varName,
+      end,
+      step,
+      loopLine: this.lineIndex
+    });
+  }
+
+  _execNext(varName) {
+    varName = varName.toUpperCase().trim() || null;
+    
+    // Find matching FOR frame
+    let frameIdx = this.stack.length - 1;
+    while (frameIdx >= 0 && this.stack[frameIdx].type !== 'FOR') frameIdx--;
+    if (frameIdx < 0) throw new Error('NEXT without FOR');
+    
+    const frame = this.stack[frameIdx];
+    if (varName && frame.varName !== varName) throw new Error(`NEXT ${varName} doesn't match FOR ${frame.varName}`);
+    
+    this.variables[frame.varName] += frame.step;
+    
+    const done = frame.step > 0
+      ? this.variables[frame.varName] > frame.end
+      : this.variables[frame.varName] < frame.end;
+    
+    if (!done) {
+      this.lineIndex = frame.loopLine;
+      this._jumped = true;
+    } else {
+      this.stack.splice(frameIdx, 1);
+    }
+  }
+
+  async _execInput(rest) {
+    // INPUT [prompt;] var [, var2 ...]
+    let prompt = '';
+    let vars = rest;
+    
+    const promptMatch = rest.match(/^"([^"]*)"[;,]\s*(.+)$/);
+    if (promptMatch) {
+      prompt = promptMatch[1];
+      vars = promptMatch[2];
+    }
+    
+    const varList = vars.split(',').map(v => v.trim());
+    
+    for (const varName of varList) {
+      const val = await this._getInput(prompt || `${varName}?`);
+      if (/\$/.test(varName)) {
+        this.stringVars[varName.toUpperCase()] = val;
+      } else {
+        this.variables[varName.toUpperCase()] = parseFloat(val) || 0;
+      }
+      prompt = '';
+    }
+  }
+
+  _getInput(prompt) {
+    return new Promise(resolve => {
+      if (this.onPrint) this.onPrint(prompt + ' ', false);
+      this.display.showText(prompt + '_');
+      this.inputMode = true;
+      this.inputBuffer = '';
+      this.inputCallback = (val) => {
+        this.inputMode = false;
+        resolve(val);
+      };
+    });
+  }
+
+  handleKeyInput(char) {
+    if (!this.inputMode) return false;
+    if (char === 'Enter' || char === '\n') {
+      const val = this.inputBuffer;
+      this.inputBuffer = '';
+      if (this.onPrint) this.onPrint(val, true);
+      if (this.inputCallback) this.inputCallback(val);
+      return true;
+    }
+    if (char === 'Backspace' || char === 'DEL') {
+      this.inputBuffer = this.inputBuffer.slice(0, -1);
+    } else if (char.length === 1) {
+      this.inputBuffer += char;
+    }
+    this.display.showText(this.inputBuffer + '_');
+    return true;
+  }
+
+  _execRead(rest) {
+    const vars = rest.split(',').map(v => v.trim());
+    for (const v of vars) {
+      if (this.dataPtr >= this.dataList.length) throw new Error('Out of data');
+      const raw = this.dataList[this.dataPtr++];
+      if (/\$/.test(v)) {
+        this.stringVars[v.toUpperCase()] = String(raw);
+      } else {
+        this.variables[v.toUpperCase()] = parseFloat(raw) || 0;
+      }
+    }
+  }
+
+  _execDim(rest) {
+    const items = rest.split(',');
+    for (const item of items) {
+      const m = item.trim().match(/^([A-Z])\s*\((\d+)(?:,(\d+))?\)$/i);
+      if (!m) throw new Error(`DIM syntax: ${item}`);
+      const name = m[1].toUpperCase();
+      const size1 = parseInt(m[2]) + 1;
+      const size2 = m[3] ? parseInt(m[3]) + 1 : 0;
+      this.arrays[name] = {};
+      if (size2 > 0) {
+        for (let i = 0; i < size1; i++)
+          for (let j = 0; j < size2; j++)
+            this.arrays[name][`${i},${j}`] = 0;
+      } else {
+        for (let i = 0; i < size1; i++)
+          this.arrays[name][String(i)] = 0;
+      }
+    }
+  }
+
+  _execList(rest) {
+    let lines = this.program;
+    if (rest.trim()) {
+      const range = rest.split('-').map(s => parseInt(s.trim()));
+      if (range.length === 1) {
+        lines = lines.filter(l => l.lineNum === range[0]);
+      } else {
+        lines = lines.filter(l => l.lineNum >= (range[0]||0) && l.lineNum <= (range[1]||99999));
+      }
+    }
+    for (const l of lines) {
+      if (this.onPrint) this.onPrint(`${l.lineNum} ${l.src}`, true);
+    }
+  }
+
+  _execDelete(rest) {
+    const range = rest.split('-').map(s => parseInt(s.trim()));
+    if (range.length === 1) {
+      this.program = this.program.filter(l => l.lineNum !== range[0]);
+    } else {
+      this.program = this.program.filter(l => l.lineNum < (range[0]||0) || l.lineNum > (range[1]||99999));
+    }
+  }
+
+  async _execOn(rest) {
+    const m = rest.match(/^(.+?)\s+(GOTO|GOSUB)\s+(.+)$/i);
+    if (!m) throw new Error('ON syntax');
+    const val = Math.floor(this.evalExpr(m[1]));
+    const cmd = m[2].toUpperCase();
+    const targets = m[3].split(',').map(s => s.trim());
+    if (val >= 1 && val <= targets.length) {
+      if (cmd === 'GOTO') this._execGoto(targets[val-1]);
+      else this._execGosub(targets[val-1]);
+    }
+  }
+
+  _sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // ─── Program execution ────────────────────────────────────────────────────
+  async run(startLine) {
+    // Pre-process DATA statements
+    this.dataList = [];
+    this.dataPtr = 0;
+    for (const line of this.program) {
+      const upper = line.src.trim().toUpperCase();
+      if (upper.startsWith('DATA ')) {
+        const items = line.src.slice(5).split(',');
+        this.dataList.push(...items.map(s => s.trim()));
+      }
+    }
+    
+    this.running = true;
+    this.lineIndex = 0;
+    
+    if (startLine !== undefined) {
+      const idx = this.program.findIndex(l => l.lineNum >= startLine);
+      this.lineIndex = idx >= 0 ? idx : 0;
+    }
+    
+    while (this.running && this.lineIndex < this.program.length) {
+      const line = this.program[this.lineIndex];
+      this._jumped = false;
+      
+      try {
+        await this.executeLine(line.src);
+      } catch(e) {
+        this.running = false;
+        const msg = `Error in ${line.lineNum}: ${e.message}`;
+        this._output(msg);
+        if (this.onPrint) this.onPrint(msg, true);
+        return;
+      }
+      
+      if (!this._jumped) this.lineIndex++;
+      
+      // Yield to browser occasionally
+      if (this.lineIndex % 100 === 0) {
+        await this._sleep(0);
+      }
+    }
+    
+    this.running = false;
+  }
+
+  stop() {
+    this.running = false;
+    this.inputMode = false;
+    if (this.inputCallback) {
+      this.inputCallback('');
+      this.inputCallback = null;
+    }
+  }
+
+  // ─── Direct command entry ─────────────────────────────────────────────────
+  async execute(input) {
+    input = input.trim();
+    if (!input) return;
+    
+    const parsed = this.tokenizeLine(input);
+    if (!parsed) return;
+    
+    if (parsed.lineNum >= 0) {
+      // Store/remove program line
+      this.addLine(parsed.lineNum, parsed.src);
+      if (this.onPrint) this.onPrint(`${parsed.lineNum} ${parsed.src}`, true);
+    } else {
+      // Execute directly
+      try {
+        await this.executeLine(parsed.src);
+        if (!this.running) {
+          // Show result if it was an expression
+          const upper = parsed.src.trim().toUpperCase();
+          if (!upper.startsWith('PRINT') && !upper.startsWith('?') && 
+              !upper.startsWith('LET') && !upper.includes('=') &&
+              !upper.startsWith('FOR') && !upper.startsWith('NEXT') &&
+              !upper.startsWith('IF') && !upper.startsWith('GOTO') &&
+              !upper.startsWith('GOSUB') && !upper.startsWith('REM') &&
+              !upper.startsWith('DIM') && !upper.startsWith('DATA') &&
+              !upper.startsWith('DEG') && !upper.startsWith('RAD') && !upper.startsWith('GRA') &&
+              upper !== 'RUN' && upper !== 'NEW' && upper !== 'END' && upper !== 'STOP') {
+            try {
+              const val = this.evalExpr(parsed.src);
+              const fmt = this._formatNum(val);
+              this._output(fmt);
+              if (this.onPrint) this.onPrint(fmt, true);
+            } catch(e) { /* not an expression */ }
+          }
+        }
+      } catch(e) {
+        const msg = `Error: ${e.message}`;
+        this._output(msg);
+        if (this.onPrint) this.onPrint(msg, true);
+      }
+    }
+  }
+}
+</script>
 <script>
 let display, basic;
 let shiftOn = false;
@@ -715,6 +2806,13 @@ async function doEnter() {
   const cmd = ti.value.trim();
   ti.value = '';
   if (!cmd) return;
+
+  // Auto power on if needed
+  if (!powered) { powerOn(); setTimeout(() => doEnterCmd(cmd), 1500); return; }
+  doEnterCmd(cmd);
+}
+
+async function doEnterCmd(cmd) {
 
   if (basic.inputMode) {
     addOut(cmd, true, 'echo');
