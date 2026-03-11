@@ -2629,37 +2629,28 @@ class PC1403Basic {
       if (this.onPrint) this.onPrint(`${parsed.lineNum} ${parsed.src}`, true);
     } else {
       // Execute directly
+      let statementError = null;
       try {
         await this.executeLine(parsed.src);
-        if (!this.running) {
-          // If it wasn't a recognised statement, try evaluating as expression
-          const upper = parsed.src.trim().toUpperCase();
-          const isStatement = upper.startsWith('PRINT') || upper.startsWith('?') ||
-            upper.startsWith('LET ') || upper.startsWith('FOR ') ||
-            upper.startsWith('NEXT') || upper.startsWith('IF ') ||
-            upper.startsWith('GOTO') || upper.startsWith('GOSUB') ||
-            upper.startsWith('REM') || upper.startsWith('DIM ') ||
-            upper.startsWith('DATA ') || upper.startsWith('READ ') ||
-            upper.startsWith('INPUT') || upper.startsWith('ON ') ||
-            upper === 'DEG' || upper === 'RAD' || upper === 'GRA' ||
-            upper === 'RUN' || upper === 'NEW' || upper === 'END' ||
-            upper === 'STOP' || upper === 'RETURN' || upper === 'RESTORE' ||
-            upper === 'CLS' || upper === 'BEEP' || upper === 'PAUSE' ||
-            upper.startsWith('WAIT ') || upper.startsWith('DELETE ') ||
-            upper.startsWith('LIST') || /^[A-Z]\$?\s*[\(\=]/.test(upper);
-          if (!isStatement) {
-            try {
-              const val = this.evalExpr(parsed.src);
-              const fmt = this._formatNum(val);
-              this._output(fmt);
-              if (this.onPrint) this.onPrint(fmt, true);
-            } catch(e) { /* not a pure expression, that's fine */ }
+      } catch(e) {
+        statementError = e;
+      }
+
+      if (!this.running) {
+        // Always try to evaluate as expression (covers CAL mode and unknown statements)
+        try {
+          const val = this.evalExpr(parsed.src);
+          const fmt = this._formatNum(val);
+          this._output(fmt);
+          if (this.onPrint) this.onPrint(fmt, true);
+        } catch(e2) {
+          // Not an expression either — report the original statement error if any
+          if (statementError) {
+            const msg = `Error: ${statementError.message}`;
+            this._output(msg);
+            if (this.onPrint) this.onPrint(msg, true);
           }
         }
-      } catch(e) {
-        const msg = `Error: ${e.message}`;
-        this._output(msg);
-        if (this.onPrint) this.onPrint(msg, true);
       }
     }
   }
