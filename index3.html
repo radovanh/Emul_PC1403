@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#1c1c1c">
+<meta name="description" content="Sharp PC-1403 Pocket Computer Emulator">
+<title>Sharp PC-1403 Emulator</title>
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PC-1403">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@700;900&family=VT323&display=swap" rel="stylesheet">
+<style>
+/* ═══ GOOGLE FONTS ═══ */
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&family=VT323&display=swap');
+
+/* ═══ RESET & BASE ═══ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: #1a1a1a;
+  font-family: 'Share Tech Mono', monospace;
+  display: flex; flex-direction: column; align-items: center;
+  min-height: 100vh; padding: 12px 8px;
+  background-image: radial-gradient(ellipse at 30% 20%, #1e2a1e 0%, #0a0a0a 60%);
+}
+
+/* ═══ LAYOUT ═══ */
+.main-layout {
+  display: flex; gap: 16px; align-items: flex-start;
+  width: 100%; max-width: 1500px;
+}
+
+/* ═══════════════════════════════════════════
+   CALCULATOR BODY  —  exact PC-1401 SVG layout
+   viewBox 642.52 × 272.13 → rendered at ~642px wide
+═══════════════════════════════════════════ */
+.calculator {
+  /* Exact aspect ratio from SVG: 642.52 / 272.13 = 2.361 */
+  width: 660px;
+  flex-shrink: 0;
+  position: relative;
+  /* Body colours from SVG: fill:#ececec body, bevel edges */
+  background: #e8e4de;
+  border-radius: 7px;
+  border: 2px solid #2e2e2e;
+  box-shadow:
+    0 0 0 1px #bbb,
+    4px 4px 0 #999,
+    6px 6px 0 #888,
+    8px 8px 14px rgba(0,0,0,.55),
+    inset 0 1px 0 rgba(255,255,255,.6),
+    inset 0 -1px 0 rgba(0,0,0,.15);
+  padding: 0;
+  user-select: none;
+}
+.calculator.powered-off { opacity: 0.7; filter: brightness(0.7); }
+
+/* ── Top brand strip ── */
+.brand-strip {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 5px 14px 3px;
+  border-bottom: 1px solid #ccc;
+}
+.brand-sharp {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px; font-weight: 900; letter-spacing: 4px;
+  color: #1a1a2e;
+}
+.brand-model {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 9px; font-weight: 400; letter-spacing: 2px; color: #555;
+}
+.power-led {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #222; border: 1px solid #999;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.5);
+  transition: all .3s;
+}
+.power-led.on {
+  background: radial-gradient(circle at 35% 35%, #7fff50, #3a8f00);
+  box-shadow: 0 0 5px #5c0, 0 0 10px rgba(120,255,0,.4);
+}
+.brand-subtitle { font-size: 7px; color: #888; letter-spacing: 3px; text-transform: uppercase; }
+
+/* ── LCD + display fascia ── */
+/* From SVG: fascia x=9.7% y=4%, right=59.6%, bottom=42.3%  */
+/* In device body coords (body starts at y≈1% of SVG, so fascia top ≈ 3% down) */
+.lcd-fascia {
+  /* exact SVG proportions: left=9.7%, top=4%, width=49.9%, height=38.3% of viewBox */
+  /* relative to calc div */
+  position: relative;
+  background: #4f4838;
+  border-radius: 4px;
+  margin: 4px 10px 0 8px;
+  padding: 6px 8px;
+  /* SVG fascia width proportion: 320.26/642.52 ≈ 49.8% of body → with margins fits ~420px area */
+  width: calc(100% - 18px);
+  max-width: 390px;
+  box-shadow: inset 0 2px 6px rgba(0,0,0,.6), 0 1px 0 #888;
+}
+.lcd-inlay {
+  background: #3a3020;
+  border-radius: 3px;
+  padding: 4px;
+  border: 1px solid #2a2010;
+}
+
+/* Indicators row inside fascia */
+.indicators {
+  display: flex; gap: 4px; margin-bottom: 4px; flex-wrap: wrap;
+}
+.ind {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 8px; font-weight: bold; letter-spacing: 1px;
+  color: #4a3820; padding: 1px 3px;
+  border: 1px solid transparent; border-radius: 2px;
+  cursor: pointer; transition: all .15s;
+}
+.ind.on {
+  color: #c8a800;
+  border-color: rgba(200,168,0,.4);
+  background: rgba(200,168,0,.1);
+  text-shadow: 0 0 4px rgba(200,168,0,.6);
+}
+.ind-run  { margin-left: auto; }
+
+/* LCD canvas */
+.lcd-screen {
+  background: #8BAC0F;
+  border-radius: 2px;
+  border: 1px solid #6a8000;
+  padding: 2px;
+  box-shadow: inset 0 2px 6px rgba(0,0,0,.4);
+}
+.lcd-screen canvas { display: block; width: 100%; image-rendering: pixelated; }
+
+/* ── Power switch ── */
+/* SVG: switch at x≈28-41, y≈-81 → viewBox y≈61 → ~22% down, ~4-6% wide */
+.power-switch-row {
+  position: absolute;
+  top: 22%; left: 1.5%;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+.power-switch-label {
+  font-size: 6px; color: #888; letter-spacing: 1px;
+  font-family: 'Share Tech Mono', monospace;
+}
+.power-switch {
+  width: 22px; height: 10px;
+  background: #333; border-radius: 5px;
+  border: 1px solid #555;
+  cursor: pointer; position: relative;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.5);
+  transition: background .2s;
+}
+.power-switch::after {
+  content: ''; position: absolute;
+  width: 10px; height: 8px; top: 1px; left: 1px;
+  background: #aaa; border-radius: 4px;
+  transition: left .2s;
+  box-shadow: 0 1px 2px rgba(0,0,0,.4);
+}
+.power-switch.on { background: #2a5020; }
+.power-switch.on::after { left: 11px; background: #80d040; }
+
+/* ═══════════════════════════════════════════
+   KEYBOARD — SVG-accurate absolute positioning
+   Device body: 660px wide
+   SVG viewBox: 642.52 wide → scale = 660/642.52 = 1.0272
+   Key positions in CSS use SVG percentages directly
+═══════════════════════════════════════════ */
+.kb-area {
+  position: relative;
+  /* Height: keys go from y≈10% to y≈95% of SVG → 85% of 660*(272/642) ≈ 275px → area ~230px */
+  height: 230px;
+  margin: 6px 0 4px;
+}
+
+/* ── Key base styles ── */
+.k {
+  position: absolute;
+  transform: translate(-50%, -50%);  /* center on the coordinate point */
+  border: none; outline: none; cursor: pointer;
+  border-radius: 3px;
+  font-family: 'Share Tech Mono', monospace;
+  line-height: 1;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  transition: filter .08s, transform .08s;
+  box-shadow:
+    0 2px 0 rgba(0,0,0,.35),
+    0 3px 3px rgba(0,0,0,.2),
+    inset 0 1px 0 rgba(255,255,255,.3);
+}
+.k:active {
+  transform: translate(-50%, -50%) translateY(1px);
+  box-shadow: 0 1px 0 rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.15);
+  filter: brightness(0.85);
+}
+/* Key label */
+.km { font-size: 7.5px; font-weight: bold; color: #111; line-height: 1; letter-spacing: .3px; }
+.ks { font-size: 5.5px; color: #c05000; margin-top: 1px; line-height: 1; }  /* shifted label */
+.ka { font-size: 5.5px; color: #0050b0; margin-top: 0; line-height: 1; }   /* above label */
+
+/* Alpha key: ~22.45 × 13.08 in SVG = 22.45/642.52*660 ≈ 23px wide, 13/272*275 ≈ 13px tall */
+.k-alpha {
+  width: 23px; height: 14px;
+  background: #ddd9d0;
+  border-bottom: 2px solid #aaa;
+  font-size: 7px;
+}
+.k-alpha .km { font-size: 7px; }
+
+/* Function/system key: same size as alpha */
+.k-func {
+  width: 23px; height: 14px;
+  background: #c8c4ba;
+  border-bottom: 2px solid #999;
+}
+.k-func .km { font-size: 6.5px; color: #222; }
+
+/* CAL key: distinct dark key */
+.k-cal {
+  width: 26px; height: 14px;
+  background: #8b1a0a;
+  border-bottom: 2px solid #5a0a00;
+}
+.k-cal .km { color: #fff; font-size: 7px; }
+
+/* SHIFT key: dark */
+.k-shift {
+  width: 28px; height: 14px;
+  background: #2a2a3a;
+  border-bottom: 2px solid #111;
+}
+.k-shift .km { color: #fff; font-size: 6.5px; }
+
+/* Numpad key: ~30.24 × 20.79 SVG = ~31px × 21px */
+.k-num {
+  width: 31px; height: 20px;
+  background: #d0ccc4;
+  border-bottom: 2px solid #aaa;
+  font-size: 8px;
+}
+.k-num .km { font-size: 8px; }
+
+/* Operator numpad key */
+.k-op {
+  width: 31px; height: 20px;
+  background: #b8b0a0;
+  border-bottom: 2px solid #999;
+}
+.k-op .km { font-size: 8px; color: #222; }
+
+/* Calc key (scientific): same as alpha */
+.k-calc {
+  width: 23px; height: 14px;
+  background: #c0bdb5;
+  border-bottom: 2px solid #999;
+  font-size: 6px;
+}
+.k-calc .km { font-size: 6px; color: #111; }
+
+/* ENTER key: wider */
+.k-enter {
+  width: 62px; height: 14px;
+  background: #8b1a0a;
+  border-bottom: 2px solid #5a0a00;
+}
+.k-enter .km { color: #fff; font-size: 7px; letter-spacing: 1px; }
+
+/* ── Section dividers / labels ── */
+.kb-label {
+  position: absolute;
+  font-size: 5.5px; color: #888; letter-spacing: 1px;
+  font-family: 'Share Tech Mono', monospace;
+  text-transform: uppercase;
+}
+.kb-divider {
+  position: absolute;
+  background: #bbb;
+  height: 1px;
+}
+
+/* ─── TERMINAL PANEL ─── */
+.terminal-panel {
+  flex: 1; min-width: 280px; max-width: 420px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.terminal {
+  background: #0a0d0a; border: 1px solid rgba(80,200,80,.15);
+  border-radius: 10px; overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,.5);
+  flex: 1; display: flex; flex-direction: column;
+}
+.t-header {
+  background: #0d150d; padding: 7px 12px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid rgba(80,200,80,.12);
+}
+.t-title { font-family:'Orbitron',sans-serif; font-size:9px; color:#50c850; letter-spacing:2px; }
+.t-dots  { display:flex; gap:5px; }
+.t-dot   { width:11px; height:11px; border-radius:50%; cursor:pointer; transition:opacity .15s; }
+.t-dot:hover { opacity:.75; }
+.dot-r { background:#ff5f57; }
+.dot-y { background:#febc2e; }
+.dot-g { background:#28c840; }
+.run-badge {
+  display:none; align-items:center; gap:5px;
+  background:rgba(80,200,80,.1); border:1px solid rgba(80,200,80,.3);
+  border-radius:4px; padding:2px 7px; font-size:9px; color:#50c850;
+}
+.run-badge.visible { display:flex; }
+.run-dot { width:6px; height:6px; border-radius:50%; background:#50c850; animation:blink 1s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+.t-out {
+  flex:1; padding:10px 12px; overflow-y:auto; max-height:320px;
+  scrollbar-width:thin; scrollbar-color:rgba(80,200,80,.2) transparent;
+}
+.oline { font-size:11px; line-height:1.6; white-space:pre-wrap; word-break:break-all; }
+.oline.echo   { color:#336633; }
+.oline.output { color:#80ff80; }
+.oline.sys    { color:#507050; font-style:italic; }
+.t-in-row {
+  display:flex; align-items:center; gap:6px;
+  padding:8px 12px; border-top:1px solid rgba(80,200,80,.1);
+}
+.t-prompt { color:#50c850; font-size:12px; }
+.t-in-row input {
+  flex:1; background:transparent; border:none; outline:none;
+  color:#c0ffc0; font-family:'Share Tech Mono',monospace; font-size:12px;
+  caret-color:#50c850;
+}
+.t-in-row input::placeholder { color:rgba(80,200,80,.25); }
+.btn-ent {
+  background:rgba(80,200,80,.1); border:1px solid rgba(80,200,80,.3);
+  color:#50c850; padding:3px 10px; border-radius:4px;
+  font-family:'Share Tech Mono',monospace; font-size:10px; cursor:pointer;
+}
+.btn-ent:hover { background:rgba(80,200,80,.2); }
+
+.samples { display:flex; flex-wrap:wrap; gap:5px; }
+.sbtn {
+  background:rgba(80,200,80,.06); border:1px solid rgba(80,200,80,.2);
+  color:#50c850; padding:3px 8px; border-radius:4px; font-size:10px;
+  font-family:'Share Tech Mono',monospace; cursor:pointer;
+}
+.sbtn:hover { background:rgba(80,200,80,.15); }
+
+.help {
+  background:#0a0d0a; border:1px solid rgba(80,200,80,.1);
+  border-radius:8px; overflow:hidden;
+}
+.help-hdr {
+  padding:6px 12px; display:flex; justify-content:space-between;
+  cursor:pointer; color:#50c850; font-size:10px;
+}
+.help-body { padding:8px 12px; font-size:10px; color:#507050; display:none; }
+.help-body div { margin-bottom:3px; }
+.help-body b { color:#50c850; }
+.help-body.open { display:block; }
+
+/* ─── CPU MONITOR ─── */
+.cpu-monitor { width:340px; flex-shrink:0; display:flex; flex-direction:column; gap:8px; font-family:'Share Tech Mono',monospace; }
+.cpu-panel { background:#0a0f14; border:1px solid rgba(0,180,255,.18); border-radius:10px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,.5); }
+.cpu-hdr { background:#0d1a24; padding:6px 12px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid rgba(0,180,255,.12); }
+.cpu-hdr-title { font-family:'Orbitron',sans-serif; font-size:9px; color:#00b4ff; letter-spacing:2px; }
+.cpu-hdr-btns { display:flex; gap:5px; }
+.cpu-btn { background:rgba(0,180,255,.08); border:1px solid rgba(0,180,255,.25); color:#00b4ff; padding:2px 8px; border-radius:4px; font-family:'Share Tech Mono',monospace; font-size:10px; cursor:pointer; transition:background .15s; }
+.cpu-btn:hover { background:rgba(0,180,255,.2); }
+.cpu-btn.active { background:rgba(0,180,255,.3); border-color:#00b4ff; }
+.cpu-btn.danger { border-color:rgba(255,80,80,.4); color:#ff6060; }
+.cpu-btn.danger:hover { background:rgba(255,80,80,.15); }
+.cpu-btn.go { border-color:rgba(80,255,120,.4); color:#50ff78; }
+.cpu-btn.go:hover { background:rgba(80,255,120,.15); }
+.cpu-btn:disabled { opacity:.4; cursor:default; }
+.mon-status { display:flex; flex-wrap:wrap; gap:4px; padding:6px 8px 8px; }
+.ms-chip { background:#0d1a24; border:1px solid rgba(0,180,255,.12); border-radius:4px; padding:2px 7px; font-size:9px; color:#336688; }
+.ms-chip.ms-run { background:rgba(80,255,120,.08); border-color:rgba(80,255,120,.3); color:#50ff78; }
+.ms-chip.ms-line { color:#ffcc00; border-color:rgba(255,204,0,.3); }
+.mon-vars { padding:4px 8px 8px; max-height:180px; overflow-y:auto; }
+.mv-row { display:flex; justify-content:space-between; padding:2px 4px; border-radius:3px; font-size:11px; }
+.mv-row.mv-changed { background:rgba(255,204,0,.08); }
+.mv-name { color:#00b4ff; min-width:30px; }
+.mv-val  { color:#e0f4ff; text-align:right; }
+.mv-val.mv-str { color:#a0e8b0; }
+.mv-val.mv-arr { color:#b0a0e8; }
+.mv-empty { font-size:9px; color:#335; padding:4px; display:block; }
+.mon-prog { padding:4px 6px 6px; max-height:200px; overflow-y:auto; }
+.pl-row { display:flex; gap:8px; padding:2px 4px; border-radius:3px; cursor:pointer; font-size:10.5px; }
+.pl-row:hover { background:rgba(0,180,255,.06); }
+.pl-row.pl-cur { background:rgba(0,180,255,.14); border-left:2px solid #00b4ff; padding-left:2px; }
+.pl-row.pl-bp  { border-left:2px solid #ff6060; padding-left:2px; background:rgba(255,60,60,.06); }
+.pl-row.pl-cur.pl-bp { border-left:2px solid #ff9900; background:rgba(255,140,0,.12); }
+.pl-ln  { color:#336688; min-width:32px; }
+.pl-src { color:#b0c8e0; }
+.mon-stack { padding:4px 8px 8px; max-height:100px; overflow-y:auto; }
+.sk-row { font-size:10px; color:#7ab8d4; padding:2px 0; border-bottom:1px solid rgba(0,180,255,.05); }
+.sk-row b { color:#ffcc00; }
+.hexdump-row { display:flex; gap:3px; align-items:center; margin-bottom:1px; font-size:10.5px; line-height:1.6; }
+.hx-addr { color:#336688; min-width:22px; font-size:9px; }
+.hx-byte { color:#7ab8d4; min-width:18px; text-align:center; border-radius:2px; cursor:pointer; transition:background .1s; }
+.hx-byte:hover { background:rgba(0,180,255,.15); }
+.hx-byte.hi { color:#ffcc00; background:rgba(255,204,0,.1); }
+.hx-byte.bp { color:#ff6060; background:rgba(255,60,60,.12); }
+.hx-sep { color:#1a3040; margin:0 2px; }
+.hx-ascii { color:#336655; margin-left:4px; font-size:9px; letter-spacing:1px; }
+.bp-list { padding:4px 8px 8px; display:flex; flex-wrap:wrap; gap:4px; min-height:24px; }
+.bp-chip { background:rgba(255,60,60,.1); border:1px solid rgba(255,60,60,.3); border-radius:12px; padding:2px 8px; font-size:10px; color:#ff6060; cursor:pointer; display:flex; align-items:center; gap:4px; }
+.bp-chip:hover { background:rgba(255,60,60,.2); }
+.cpu-input-row { display:flex; gap:4px; padding:0 8px 8px; }
+.cpu-input { flex:1; background:#0d1a24; border:1px solid rgba(0,180,255,.2); border-radius:4px; color:#00b4ff; font-family:'Share Tech Mono',monospace; font-size:11px; padding:3px 6px; outline:none; }
+.cpu-input:focus { border-color:#00b4ff; }
+.cpu-input::placeholder { color:rgba(0,180,255,.3); }
+.cpu-panel .cpu-body { display:block; }
+.cpu-panel.collapsed .cpu-body { display:none; }
+/* Tabs */
+.cpu-tabs { display:flex; border-bottom:1px solid rgba(0,180,255,.15); }
+.cpu-tab { flex:1; padding:5px 4px; text-align:center; font-family:'Orbitron',sans-serif; font-size:8px; letter-spacing:1px; color:#336688; cursor:pointer; border-bottom:2px solid transparent; transition:all .15s; user-select:none; }
+.cpu-tab:hover { color:#00b4ff; }
+.cpu-tab.active { color:#00b4ff; border-bottom-color:#00b4ff; }
+.cpu-tab-body { display:none; }
+.cpu-tab-body.active { display:block; }
+.regs-grid2 { display:grid; grid-template-columns:repeat(4,1fr); gap:3px; padding:7px; }
+.rc { background:#0d1a24; border:1px solid rgba(0,180,255,.1); border-radius:4px; padding:3px 5px; text-align:center; }
+.rc .rn { font-size:7px; color:#00b4ff; letter-spacing:1px; }
+.rc .rv { font-size:12px; color:#e0f4ff; font-family:'Share Tech Mono',monospace; }
+.rc .rv.chg { color:#ffcc00; }
+.regs-wide2 { display:grid; grid-template-columns:repeat(4,1fr); gap:3px; padding:0 7px 7px; }
+.flags-row2 { display:flex; gap:5px; padding:0 7px 7px; align-items:center; }
+.flag2 { background:#0d1a24; border:1px solid rgba(0,180,255,.1); border-radius:3px; padding:2px 7px; font-size:10px; color:#223344; transition:all .15s; }
+.flag2.on { background:rgba(0,180,255,.15); border-color:#00b4ff; color:#00b4ff; }
+.cyc2 { margin-left:auto; font-size:9px; color:#336; }
+.cyc2 span { color:#00b4ff; }
+.disasm2 { padding:5px 7px; font-size:10.5px; max-height:220px; overflow-y:auto; }
+.dl { display:flex; gap:6px; padding:2px 3px; border-radius:3px; cursor:pointer; align-items:baseline; }
+.dl:hover { background:rgba(0,180,255,.07); }
+.dl.cur { background:rgba(0,180,255,.13); border-left:2px solid #00b4ff; padding-left:1px; }
+.dl.bp  { background:rgba(255,60,60,.08); border-left:2px solid #ff6060; padding-left:1px; }
+.dl.cur.bp { background:rgba(255,140,0,.12); border-left:2px solid #ff9900; padding-left:1px; }
+.da { color:#336688; min-width:36px; font-size:9px; }
+.db { color:#1e4060; min-width:52px; font-size:9px; }
+.dm { color:#7ad4a8; min-width:44px; }
+.do { color:#b0c8e0; }
+.mem-toolbar { display:flex; gap:4px; padding:5px 7px 0; flex-wrap:wrap; align-items:center; }
+.mem-toolbar label { font-size:9px; color:#336688; }
+.mem-hexdump { padding:5px 7px 7px; font-size:10.5px; max-height:190px; overflow-y:auto; }
+.cpu-textarea { width:calc(100% - 14px); box-sizing:border-box; background:#060e14; border:1px solid rgba(0,180,255,.2); border-radius:4px; color:#7ad4a8; font-family:'Share Tech Mono',monospace; font-size:10px; padding:4px 6px; resize:vertical; min-height:52px; outline:none; margin:0 7px; }
+.cpu-textarea::placeholder { color:rgba(0,180,255,.25); }
+
+/* ─── FOOTER ─── */
+footer { margin-top:14px; text-align:center; color:#444; font-size:10px; font-family:'Share Tech Mono',monospace; }
+footer a { color:#666; text-decoration:none; }
+footer a:hover { color:#888; }
+
+@media(max-width:1100px) {
+  .main-layout { flex-wrap:wrap; }
+  .calculator { width:100%; max-width:660px; }
+  .cpu-monitor { width:100%; max-width:580px; }
+}
+</style>
+</head>
+<body>
+
+<header class="page-header">
+  <div class="page-title">SHARP PC-1403</div>
+  <div class="page-sub">Pocket Computer Emulator</div>
+</header>
+
+<div class="main-layout">
+
+<!-- ═══════════════ CALCULATOR ═══════════════ -->
+<div class="calculator" id="calcBody">
+
+  <!-- Brand strip -->
+  <div class="brand-strip">
+    <div class="brand-sharp">SHARP</div>
+    <div>
+      <div class="brand-subtitle">POCKET COMPUTER</div>
+    </div>
+    <div class="power-led" id="powerLed"></div>
+    <div class="brand-model">PC-1403</div>
+  </div>
+
+  <!-- Power switch + LCD fascia side by side -->
+  <div style="display:flex;align-items:flex-start;padding:4px 6px 0;gap:6px;">
+
+    <!-- Power switch (left side, SVG x≈4-6%) -->
+    <div style="display:flex;flex-direction:column;align-items:center;padding-top:8px;gap:3px;">
+      <div class="power-switch on" id="pwrSwitch" onclick="togglePower()" title="Power ON/OFF"></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:1px;">
+        <div style="font-size:6px;color:#888;letter-spacing:1px;">ON</div>
+        <div style="font-size:6px;color:#888;letter-spacing:1px;">OFF</div>
+      </div>
+    </div>
+
+    <!-- LCD fascia (SVG fill:#4f4838) -->
+    <div class="lcd-fascia" style="flex:1;">
+      <div class="lcd-inlay">
+        <!-- Indicators inside fascia -->
+        <div class="indicators">
+          <span class="ind" id="i-busy">BUSY</span>
+          <span class="ind" id="i-def">DEF</span>
+          <span class="ind" id="i-deg" onclick="setAngle('DEG')">DEG</span>
+          <span class="ind" id="i-rad" onclick="setAngle('RAD')">RAD</span>
+          <span class="ind" id="i-gra" onclick="setAngle('GRA')">GRA</span>
+          <span class="ind" id="i-shf">SHIFT</span>
+          <span class="ind" id="i-hyp">HYP</span>
+          <span class="ind" id="i-m">M</span>
+          <span class="ind" id="i-e">E</span>
+          <span class="ind ind-run" id="i-run">RUN</span>
+          <span class="ind" id="i-pro">PRO</span>
+        </div>
+        <!-- LCD canvas -->
+        <div class="lcd-screen">
+          <canvas id="lcd"></canvas>
+        </div>
+        <!-- CAL / STAT / PRINT indicators below LCD -->
+        <div style="display:flex;gap:8px;padding-top:3px;">
+          <span class="ind" id="i-cal">CAL</span>
+          <span class="ind" id="i-stat">STAT</span>
+          <span class="ind" id="i-print">PRINT</span>
+          <span class="ind" id="i-basic">BASIC</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Calc function keys (SVG right side, x≈70-99%) -->
+    <!-- 3 rows × 5-6 keys, positioned relative to a right-side container -->
+    <div style="display:flex;flex-direction:column;gap:3px;padding-top:2px;">
+      <!-- Row 1: HYP SIN COS TAN F↔E -->
+      <div style="display:flex;gap:3px;">
+        <button class="k k-calc" onclick="kp('HYP')" title="HYP"><span class="ka">ARC HYP</span><span class="km">HYP</span></button>
+        <button class="k k-calc" onclick="kp('SIN')" title="SIN"><span class="ka">sin⁻¹</span><span class="km">SIN</span></button>
+        <button class="k k-calc" onclick="kp('COS')" title="COS"><span class="ka">cos⁻¹</span><span class="km">COS</span></button>
+        <button class="k k-calc" onclick="kp('TAN')" title="TAN"><span class="ka">tan⁻¹</span><span class="km">TAN</span></button>
+        <button class="k k-calc" onclick="kp('FE')" title="F↔E"><span class="km">F↔E</span></button>
+      </div>
+      <!-- Row 2: →HEX →DEG LN LOG 1/X SWAP -->
+      <div style="display:flex;gap:3px;">
+        <button class="k k-calc" onclick="kp('HEX')" title="→HEX"><span class="km" style="font-size:5.5px;">→HEX</span></button>
+        <button class="k k-calc" onclick="kp('DEG')" title="→DEG"><span class="km" style="font-size:5.5px;">→DEG</span></button>
+        <button class="k k-calc" onclick="kp('LN')"  title="LN"><span class="ka">eˣ</span><span class="km">LN</span></button>
+        <button class="k k-calc" onclick="kp('LOG')" title="LOG"><span class="ka">10ˣ</span><span class="km">LOG</span></button>
+        <button class="k k-calc" onclick="kp('INV')" title="1/x"><span class="km">1/x</span></button>
+        <button class="k k-calc" onclick="kp('SWAP')" title="SWAP"><span class="km" style="font-size:5.5px;">SWAP</span></button>
+      </div>
+      <!-- Row 3: EXP y^x √ x² ( ) -->
+      <div style="display:flex;gap:3px;">
+        <button class="k k-calc" onclick="kp('EXP')"  title="EXP"><span class="km">EXP</span></button>
+        <button class="k k-calc" onclick="kp('POW')"  title="yˣ"><span class="km">yˣ</span></button>
+        <button class="k k-calc" onclick="kp('SQRT')" title="√"><span class="km">√x</span></button>
+        <button class="k k-calc" onclick="kp('SQR')"  title="x²"><span class="km">x²</span></button>
+        <button class="k k-calc" onclick="kp('(')"    title="("><span class="km">(</span></button>
+        <button class="k k-calc" onclick="kp(')')"    title=")"><span class="km">)</span></button>
+      </div>
+    </div>
+
+  </div><!-- /flex row: switch + LCD + calc keys -->
+
+  <!-- ═══ KEYBOARD AREA — SVG-accurate layout ═══ -->
+  <!-- Uses a CSS grid-based layout that matches SVG proportions:
+       Left section (QWERTY + func): ~65% width
+       Right section (NumPad): ~35% width -->
+  <div style="display:flex;padding:4px 6px 6px;gap:3px;margin-top:2px;">
+
+    <!-- LEFT: Function row + QWERTY block -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:3px;">
+
+      <!-- Function row: CAL BRK DEF ↓ ↑ ← → SHIFT  (SVG y≈52.9%) -->
+      <div style="display:flex;gap:3px;align-items:center;">
+        <button class="k k-cal"   onclick="kp('CAL')"   title="CAL/RUN mode"><span class="km">CAL</span></button>
+        <button class="k k-func"  onclick="kp('BRK')"   title="Break"><span class="km">BRK</span></button>
+        <button class="k k-func"  onclick="kp('DEF')"   title="Define"><span class="km">DEF</span></button>
+        <button class="k k-func"  onclick="kp('CsrDn')" title="Cursor Down"><span class="km">↓</span></button>
+        <button class="k k-func"  onclick="kp('CsrUp')" title="Cursor Up"><span class="km">↑</span></button>
+        <button class="k k-func"  onclick="kp('CsrLt')" title="Cursor Left"><span class="km">←</span></button>
+        <button class="k k-func"  onclick="kp('CsrRt')" title="Cursor Right"><span class="km">→</span></button>
+        <button class="k k-shift" onclick="kp('SHIFT')" title="Shift" id="shiftBtn"><span class="km">SHIFT</span></button>
+        <button class="k k-func"  onclick="kp('BASIC')" title="BASIC mode" style="width:30px;"><span class="km" style="font-size:6px;">BASIC</span></button>
+      </div>
+
+      <!-- QWERTY row: Q W E R T Y U I O P  (SVG y≈65.3%) -->
+      <div style="display:flex;gap:3px;">
+        <button class="k k-alpha" onclick="kp('Q')"><span class="ks">PRINT</span><span class="km">Q</span></button>
+        <button class="k k-alpha" onclick="kp('W')"><span class="ks">RUN</span><span class="km">W</span></button>
+        <button class="k k-alpha" onclick="kp('E')"><span class="ks">LIST</span><span class="km">E</span></button>
+        <button class="k k-alpha" onclick="kp('R')"><span class="ks">NEXT</span><span class="km">R</span></button>
+        <button class="k k-alpha" onclick="kp('T')"><span class="ks">STEP</span><span class="km">T</span></button>
+        <button class="k k-alpha" onclick="kp('Y')"><span class="ks">TO</span><span class="km">Y</span></button>
+        <button class="k k-alpha" onclick="kp('U')"><span class="ks">FOR</span><span class="km">U</span></button>
+        <button class="k k-alpha" onclick="kp('I')"><span class="ks">GOTO</span><span class="km">I</span></button>
+        <button class="k k-alpha" onclick="kp('O')"><span class="ks">THEN</span><span class="km">O</span></button>
+        <button class="k k-alpha" onclick="kp('P')"><span class="ks">IF</span><span class="km">P</span></button>
+        <button class="k k-func" style="width:28px;" onclick="kp('BS')"><span class="km" style="font-size:6px;">BS/DEL</span></button>
+      </div>
+
+      <!-- ASDFG row: A S D F G H J K L ,  (SVG y≈77.7%) -->
+      <div style="display:flex;gap:3px;">
+        <div style="width:12px;"></div><!-- slight offset like real ASDF row -->
+        <button class="k k-alpha" onclick="kp('A')"><span class="ks">INPUT</span><span class="km">A</span></button>
+        <button class="k k-alpha" onclick="kp('S')"><span class="ks">P↔NP</span><span class="km">S</span></button>
+        <button class="k k-alpha" onclick="kp('D')"><span class="ks">CLOAD</span><span class="km">D</span></button>
+        <button class="k k-alpha" onclick="kp('F')"><span class="ks">CSAVE</span><span class="km">F</span></button>
+        <button class="k k-alpha" onclick="kp('G')"><span class="ks">END</span><span class="km">G</span></button>
+        <button class="k k-alpha" onclick="kp('H')"><span class="ks">DIM</span><span class="km">H</span></button>
+        <button class="k k-alpha" onclick="kp('J')"><span class="ks">RETURN</span><span class="km">J</span></button>
+        <button class="k k-alpha" onclick="kp('K')"><span class="ks">GOSUB</span><span class="km">K</span></button>
+        <button class="k k-alpha" onclick="kp('L')"><span class="ks">USING</span><span class="km">L</span></button>
+        <button class="k k-alpha" onclick="kp(',')"><span class="km">,</span></button>
+        <button class="k k-func k-enter" onclick="kp('Enter')" style="width:42px;height:28px;border-radius:3px;position:relative;"><span class="km" style="color:#fff;font-size:7px;letter-spacing:1px;">ENTER</span></button>
+      </div>
+
+      <!-- ZXCV row: Z X C V B N M SPC  (SVG y≈90.2%) -->
+      <div style="display:flex;gap:3px;">
+        <div style="width:20px;"></div>
+        <button class="k k-alpha" onclick="kp('Z')"><span class="ks">DEL</span><span class="km">Z</span></button>
+        <button class="k k-alpha" onclick="kp('X')"><span class="ks">INS</span><span class="km">X</span></button>
+        <button class="k k-alpha" onclick="kp('C')"><span class="km">C</span></button>
+        <button class="k k-alpha" onclick="kp('V')"><span class="km">V</span></button>
+        <button class="k k-alpha" onclick="kp('B')"><span class="km">B</span></button>
+        <button class="k k-alpha" onclick="kp('N')"><span class="km">N</span></button>
+        <button class="k k-alpha" onclick="kp('M')"><span class="km">M</span></button>
+        <button class="k k-alpha" onclick="kp(' ')" style="width:36px;"><span class="km" style="font-size:6px;">SPACE</span></button>
+      </div>
+
+    </div><!-- /left QWERTY block -->
+
+    <!-- Vertical divider -->
+    <div style="width:1px;background:#ccc;margin:0 2px;align-self:stretch;"></div>
+
+    <!-- RIGHT: NumPad (SVG x≈65-93%, exact 5×4 grid) -->
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:3px;align-content:start;">
+      <!-- Row 1: 7 8 9 ÷ x→M -->
+      <button class="k k-num" onclick="kp('7')"><span class="km">7</span></button>
+      <button class="k k-num" onclick="kp('8')"><span class="km">8</span></button>
+      <button class="k k-num" onclick="kp('9')"><span class="km">9</span></button>
+      <button class="k k-op"  onclick="kp('/')"><span class="ks">÷</span><span class="km">/</span></button>
+      <button class="k k-op"  onclick="kp('xM')" style="font-size:6px;"><span class="km" style="font-size:6px;">x→M</span></button>
+      <!-- Row 2: 4 5 6 × RM -->
+      <button class="k k-num" onclick="kp('4')"><span class="km">4</span></button>
+      <button class="k k-num" onclick="kp('5')"><span class="km">5</span></button>
+      <button class="k k-num" onclick="kp('6')"><span class="km">6</span></button>
+      <button class="k k-op"  onclick="kp('*')"><span class="ks">×</span><span class="km">*</span></button>
+      <button class="k k-op"  onclick="kp('RM')"><span class="km" style="font-size:6.5px;">RM</span></button>
+      <!-- Row 3: 1 2 3 - M+ -->
+      <button class="k k-num" onclick="kp('1')"><span class="km">1</span></button>
+      <button class="k k-num" onclick="kp('2')"><span class="km">2</span></button>
+      <button class="k k-num" onclick="kp('3')"><span class="km">3</span></button>
+      <button class="k k-op"  onclick="kp('-')"><span class="km">−</span></button>
+      <button class="k k-op"  onclick="kp('M+')"><span class="km" style="font-size:6.5px;">M+</span></button>
+      <!-- Row 4: 0 +/- . + = -->
+      <button class="k k-num" onclick="kp('0')"><span class="km">0</span></button>
+      <button class="k k-num" onclick="kp('+/-')" style="font-size:6.5px;"><span class="km" style="font-size:6.5px;">+/−</span></button>
+      <button class="k k-num" onclick="kp('.')"><span class="km">.</span></button>
+      <button class="k k-op"  onclick="kp('+')"><span class="km">+</span></button>
+      <button class="k k-op"  onclick="kp('=')" style="background:#8b1a0a;border-bottom-color:#5a0a00;"><span class="km" style="color:#fff;">=</span></button>
+    </div>
+
+  </div><!-- /flex row: QWERTY + numpad -->
+
+</div><!-- /calculator -->
+
+
+
