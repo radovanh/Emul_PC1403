@@ -1,0 +1,4271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#1c1c1c">
+<meta name="description" content="Sharp PC-1403 Pocket Computer Emulator">
+<title>Sharp PC-1403 Emulator</title>
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PC-1403">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@700;900&family=VT323&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%}
+
+body {
+  background: #181818;
+  background-image: radial-gradient(ellipse at 50% 0%, #242424 0%, #111 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 10px 40px;
+  font-family: 'Share Tech Mono', monospace;
+  color: #aaa;
+}
+
+/* PAGE HEADER */
+.page-header { text-align:center; margin-bottom:18px; }
+.page-title {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 900;
+  font-size: clamp(16px, 3.5vw, 28px);
+  color: #8bac0f;
+  letter-spacing: 5px;
+  text-shadow: 0 0 16px rgba(139,172,15,0.5);
+}
+.page-sub { font-size:11px; color:#444; letter-spacing:3px; margin-top:4px; }
+
+/* MAIN LAYOUT */
+.main-layout {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  width: 100%;
+  max-width: 1440px;
+}
+
+/* CALCULATOR SHELL */
+.calculator {
+  background: linear-gradient(170deg, #333 0%, #1e1e1e 40%, #252525 100%);
+  border-radius: 14px 14px 22px 22px;
+  padding: 14px 14px 20px;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.07),
+    0 2px 8px rgba(0,0,0,0.5),
+    0 12px 40px rgba(0,0,0,0.8),
+    inset 0 1px 0 rgba(255,255,255,0.1);
+  width: 580px;
+  flex-shrink: 0;
+}
+
+/* BRAND PLATE */
+.brand-plate {
+  display:flex; justify-content:space-between; align-items:flex-end;
+  padding:0 2px 10px;
+}
+.brand-sharp {
+  font-family:'Orbitron',sans-serif; font-weight:900; font-size:13px;
+  letter-spacing:5px; color:#8bac0f;
+  text-shadow:0 0 8px rgba(139,172,15,0.5);
+}
+.brand-model { font-family:'Orbitron',sans-serif; font-size:10px; color:#555; letter-spacing:2px; }
+.power-dot {
+  width:7px; height:7px; border-radius:50%;
+  background:#8bac0f; box-shadow:0 0 8px #8bac0f;
+  animation:pwrPulse 3s ease-in-out infinite;
+}
+@keyframes pwrPulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* LCD */
+.lcd-bezel {
+  background:#111; border-radius:7px; padding:8px; margin-bottom:14px;
+  box-shadow:inset 0 2px 8px rgba(0,0,0,.9),0 0 0 1px rgba(0,0,0,.6);
+}
+.lcd-screen { background:#8bac0f; border-radius:4px; position:relative; overflow:hidden; transition:background .4s, filter .4s; }
+.powered-off .lcd-screen { background:#5a7a10; filter:brightness(0.35); }
+.powered-off .indicators { opacity:0.15; }
+.lcd-screen::after {
+  content:''; position:absolute; inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.05) 3px,rgba(0,0,0,.05) 4px);
+  pointer-events:none; z-index:2;
+}
+#lcd { display:block; width:100%; height:56px; }
+
+/* INDICATORS */
+.indicators {
+  display:flex; gap:6px; padding:3px 4px 8px;
+  font-family:'VT323',monospace; font-size:11px;
+}
+.ind {
+  color:#2a4a0f; padding:1px 4px; border-radius:3px;
+  cursor:pointer; user-select:none; transition:color .1s,background .1s;
+}
+.ind.on {
+  color:#8bac0f; background:rgba(139,172,15,.12);
+  text-shadow:0 0 4px rgba(139,172,15,.6);
+}
+.ind-r { margin-left:auto; }
+
+/* KEYBOARD WRAP */
+.keyboard-wrap { display:flex; flex-direction:column; gap:5px; }
+.krow { display:flex; gap:4px; align-items:stretch; }
+.kgap { flex:0 0 8px; }
+
+/* KEY BASE */
+.k {
+  position:relative; flex:1; min-width:0; height:36px;
+  border:none; border-radius:5px; cursor:pointer;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  font-family:'Share Tech Mono',monospace; line-height:1;
+  transition:filter .08s,transform .06s;
+  outline:none; -webkit-tap-highlight-color:transparent; user-select:none; padding:0 2px;
+}
+.k::before {
+  content:''; position:absolute; inset:0; border-radius:5px;
+  background:linear-gradient(180deg,rgba(255,255,255,.13) 0%,transparent 55%);
+  pointer-events:none;
+}
+.k:active,.k.pressed { transform:translateY(2px); filter:brightness(.75); }
+
+/* Label layers */
+.kl-main { font-size:11px; font-weight:600; color:#e8e8e8; }
+.kl-sub  { font-size:7px; color:#ffd700; opacity:0; margin-top:2px; transition:opacity .15s; }
+.keyboard-wrap.shifted .kl-sub { opacity:1; }
+
+/* KEY COLOR VARIANTS */
+.k-alpha {
+  background:linear-gradient(180deg,#4a4a4a 0%,#353535 100%);
+  box-shadow:0 3px 0 #1a1a1a,0 4px 6px rgba(0,0,0,.4);
+}
+.k-num {
+  background:linear-gradient(180deg,#3d3d3d 0%,#2a2a2a 100%);
+  box-shadow:0 3px 0 #111,0 4px 6px rgba(0,0,0,.4);
+}
+.k-op {
+  background:linear-gradient(180deg,#c85a00 0%,#a04500 100%);
+  box-shadow:0 3px 0 #5a2000,0 4px 6px rgba(0,0,0,.4);
+}
+.k-op .kl-main { color:#fff; font-size:14px; }
+.k-fn {
+  background:linear-gradient(180deg,#1a4520 0%,#112d14 100%);
+  box-shadow:0 3px 0 #061009,0 4px 6px rgba(0,0,0,.4);
+}
+.k-fn .kl-main { color:#6ecf6e; font-size:9.5px; }
+.k-shift {
+  background:linear-gradient(180deg,#6a5a10 0%,#4a3a05 100%);
+  box-shadow:0 3px 0 #1a1200,0 4px 6px rgba(0,0,0,.4);
+}
+.k-shift .kl-main { color:#ffd700; font-size:9.5px; }
+.k-shift.on {
+  background:linear-gradient(180deg,#a09020 0%,#705500 100%);
+  box-shadow:0 0 10px rgba(255,215,0,.4),0 3px 0 #221a00;
+}
+.k-sys {
+  background:linear-gradient(180deg,#2a2545 0%,#1a1530 100%);
+  box-shadow:0 3px 0 #0d0a20,0 4px 6px rgba(0,0,0,.4);
+}
+.k-sys .kl-main { color:#9b7bd4; font-size:9px; }
+.k-del {
+  background:linear-gradient(180deg,#4a1515 0%,#330d0d 100%);
+  box-shadow:0 3px 0 #1a0505,0 4px 6px rgba(0,0,0,.4);
+}
+.k-del .kl-main { color:#ff7070; font-size:9.5px; }
+.k-ent {
+  background:linear-gradient(180deg,#0f3535 0%,#082525 100%);
+  box-shadow:0 3px 0 #030f0f,0 4px 6px rgba(0,0,0,.4);
+}
+.k-ent .kl-main { color:#40d0d0; font-size:10px; }
+
+/* Fixed size keys */
+.k-sm { flex:0 0 42px; }
+.k-md { flex:0 0 50px; }
+.k-lg { flex:0 0 68px; }
+.k-xl { flex:0 0 80px; }
+
+/* Divider */
+.kdiv {
+  height:4px;
+  background:linear-gradient(90deg,transparent,rgba(139,172,15,.12),transparent);
+  border-radius:2px; margin:2px 0;
+}
+
+/* TERMINAL PANEL */
+.terminal-panel { flex:1; min-width:0; display:flex; flex-direction:column; gap:10px; }
+.terminal {
+  background:#0d1117; border:1px solid rgba(139,172,15,.2);
+  border-radius:10px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,.5);
+}
+.t-header {
+  background:#161b22; padding:7px 14px;
+  display:flex; justify-content:space-between; align-items:center;
+  border-bottom:1px solid rgba(139,172,15,.12);
+}
+.t-title { font-family:'Orbitron',sans-serif; font-size:9px; color:#8bac0f; letter-spacing:2px; }
+.t-dots { display:flex; gap:5px; }
+.t-dot { width:10px; height:10px; border-radius:50%; cursor:pointer; }
+.dot-r{background:#ff5f57}.dot-y{background:#febc2e}.dot-g{background:#28c840}
+
+.t-out {
+  height:220px; overflow-y:auto; padding:10px 14px;
+  font-family:'VT323',monospace; font-size:15px; line-height:1.5; color:#8bac0f;
+}
+.t-out::-webkit-scrollbar{width:4px}
+.t-out::-webkit-scrollbar-thumb{background:rgba(139,172,15,.3);border-radius:2px}
+.oline{white-space:pre-wrap;word-break:break-all}
+.oline.err{color:#ff7070}.oline.sys{color:#6b9bd2}.oline.echo{color:#a0c0ff}
+
+.t-in-row {
+  display:flex; align-items:center; gap:6px;
+  padding:6px 14px; border-top:1px solid rgba(139,172,15,.12); background:#0d1117;
+}
+.t-prompt { font-family:'VT323',monospace; font-size:17px; color:#8bac0f; white-space:nowrap; flex-shrink:0; }
+#ti {
+  flex:1; background:transparent; border:none; outline:none;
+  color:#8bac0f; font-family:'VT323',monospace; font-size:17px;
+  caret-color:#8bac0f; min-width:0;
+}
+#ti::placeholder{color:rgba(139,172,15,.3)}
+.btn-ent {
+  background:rgba(139,172,15,.12); border:1px solid rgba(139,172,15,.3);
+  color:#8bac0f; padding:3px 10px; border-radius:6px;
+  font-family:'Orbitron',sans-serif; font-size:9px; letter-spacing:1px;
+  cursor:pointer; flex-shrink:0;
+}
+.btn-ent:hover{background:rgba(139,172,15,.25)}
+
+.run-badge {
+  display:none; align-items:center; gap:5px; padding:2px 8px;
+  background:rgba(139,172,15,.1); border:1px solid rgba(139,172,15,.3);
+  border-radius:10px; font-size:10px; color:#8bac0f;
+}
+.run-badge.on{display:flex}
+.run-dot{width:5px;height:5px;border-radius:50%;background:#8bac0f;animation:rp .8s ease-in-out infinite}
+@keyframes rp{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.6)}}
+
+.samples { display:flex; flex-wrap:wrap; gap:6px; }
+.sbtn {
+  background:rgba(26,58,26,.4); border:1px solid rgba(139,172,15,.2);
+  color:#6db36d; padding:4px 12px; border-radius:20px;
+  font-family:'Share Tech Mono',monospace; font-size:11px; cursor:pointer; transition:all .2s;
+}
+.sbtn:hover{background:rgba(139,172,15,.15);color:#8bac0f;border-color:rgba(139,172,15,.4)}
+
+.help { background:#161b22; border:1px solid rgba(139,172,15,.1); border-radius:8px; overflow:hidden; }
+.help-hdr {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:7px 12px; cursor:pointer;
+}
+.help-ttl{font-family:'Orbitron',sans-serif;font-size:9px;color:#555;letter-spacing:1px}
+.help-arr{color:#444;font-size:11px;transition:transform .2s}
+.help-arr.open{transform:rotate(180deg)}
+.help-body {
+  display:none; padding:10px 12px;
+  font-size:11px; color:#555; line-height:1.9;
+  column-count:2; column-gap:14px;
+  border-top:1px solid rgba(139,172,15,.08);
+}
+.help-body.vis{display:block}
+.help-body b{color:#8bac0f}
+
+footer { margin-top:28px; text-align:center; font-size:10px; color:#333; line-height:1.9; }
+footer a{color:#444;text-decoration:none}
+footer a:hover{color:#8bac0f}
+
+/* RESPONSIVE */
+@media(max-width:880px){
+  .main-layout{flex-direction:column;align-items:center}
+  .terminal-panel{width:100%;max-width:580px}
+}
+@media(max-width:620px){
+  .calculator{width:100%;min-width:0}
+  .k{height:31px}
+  .k .kl-main{font-size:10px}
+  .k-fn .kl-main{font-size:8.5px}
+  .k-sys .kl-main{font-size:8px}
+  .krow{gap:3px}
+  .keyboard-wrap{gap:4px}
+  .k-sm{flex:0 0 36px}
+  .k-md{flex:0 0 43px}
+  .k-lg{flex:0 0 56px}
+  .k-xl{flex:0 0 64px}
+}
+@media(max-width:400px){
+  .k{height:28px}
+  .k .kl-main{font-size:9px}
+  .k-fn .kl-main{font-size:7.5px}
+  .krow{gap:2px}
+  .keyboard-wrap{gap:3px}
+  .k-sm{flex:0 0 30px}
+  .k-md{flex:0 0 36px}
+}
+
+/* ═══════════ CPU MONITOR ═══════════ */
+.cpu-monitor {
+  width: 340px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: 'Share Tech Mono', monospace;
+}
+.cpu-panel {
+  background: #0a0f14;
+  border: 1px solid rgba(0,180,255,.18);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,.5), 0 0 0 1px rgba(0,180,255,.05);
+}
+.cpu-hdr {
+  background: #0d1a24;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(0,180,255,.12);
+}
+.cpu-hdr-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 9px;
+  color: #00b4ff;
+  letter-spacing: 2px;
+}
+.cpu-hdr-btns { display: flex; gap: 5px; }
+.cpu-btn {
+  background: rgba(0,180,255,.08);
+  border: 1px solid rgba(0,180,255,.25);
+  color: #00b4ff;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.cpu-btn:hover { background: rgba(0,180,255,.2); }
+.cpu-btn.active { background: rgba(0,180,255,.3); border-color: #00b4ff; }
+.cpu-btn.danger { border-color: rgba(255,80,80,.4); color: #ff6060; }
+.cpu-btn.danger:hover { background: rgba(255,80,80,.15); }
+.cpu-btn.go { border-color: rgba(80,255,120,.4); color: #50ff78; }
+.cpu-btn.go:hover { background: rgba(80,255,120,.15); }
+
+/* Registers grid */
+.regs-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 8px;
+}
+.reg-cell {
+  background: #0d1a24;
+  border: 1px solid rgba(0,180,255,.1);
+  border-radius: 4px;
+  padding: 4px 6px;
+  text-align: center;
+}
+.reg-name {
+  font-size: 8px;
+  color: #00b4ff;
+  letter-spacing: 1px;
+  margin-bottom: 2px;
+}
+.reg-val {
+  font-size: 13px;
+  color: #e0f4ff;
+  font-family: 'Share Tech Mono', monospace;
+}
+.reg-val.changed { color: #ffcc00; }
+
+/* Wide register row (PC, DP, X, Y) */
+.regs-wide {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 0 8px 8px;
+}
+.reg-cell-wide {
+  background: #0d1a24;
+  border: 1px solid rgba(0,180,255,.1);
+  border-radius: 4px;
+  padding: 4px 6px;
+  text-align: center;
+}
+.reg-cell-wide .reg-name { font-size: 8px; color: #00b4ff; }
+.reg-cell-wide .reg-val  { font-size: 12px; color: #e0f4ff; }
+
+/* Flags row */
+.flags-row {
+  display: flex;
+  gap: 6px;
+  padding: 0 8px 8px;
+  align-items: center;
+}
+.flag-chip {
+  background: #0d1a24;
+  border: 1px solid rgba(0,180,255,.12);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 10px;
+  color: #336;
+  transition: all .15s;
+}
+.flag-chip.on {
+  background: rgba(0,180,255,.15);
+  border-color: #00b4ff;
+  color: #00b4ff;
+  box-shadow: 0 0 6px rgba(0,180,255,.3);
+}
+.cycles-disp {
+  margin-left: auto;
+  font-size: 9px;
+  color: #336;
+}
+.cycles-disp span { color: #00b4ff; }
+
+/* IRAM hex dump */
+.hexdump {
+  padding: 6px 8px 8px;
+  overflow-x: auto;
+}
+.hexdump-row {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  margin-bottom: 1px;
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+.hx-addr {
+  color: #336688;
+  min-width: 22px;
+  font-size: 9px;
+}
+.hx-byte {
+  color: #7ab8d4;
+  min-width: 18px;
+  text-align: center;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background .1s;
+}
+.hx-byte:hover { background: rgba(0,180,255,.15); }
+.hx-byte.hi { color: #ffcc00; background: rgba(255,204,0,.1); }
+.hx-byte.bp { color: #ff6060; background: rgba(255,60,60,.12); }
+.hx-sep { color: #1a3040; margin: 0 2px; }
+.hx-ascii {
+  color: #336655;
+  margin-left: 4px;
+  font-size: 9px;
+  letter-spacing: 1px;
+}
+
+/* Disassembler */
+.disasm {
+  padding: 6px 8px 8px;
+  font-size: 10.5px;
+}
+.disasm-line {
+  display: flex;
+  gap: 8px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  align-items: baseline;
+  transition: background .1s;
+}
+.disasm-line:hover { background: rgba(0,180,255,.06); }
+.disasm-line.current { background: rgba(0,180,255,.12); border-left: 2px solid #00b4ff; padding-left: 2px; }
+.disasm-line.bp-line { background: rgba(255,60,60,.08); border-left: 2px solid #ff6060; padding-left: 2px; }
+.disasm-line.current.bp-line { background: rgba(255,120,0,.15); border-left: 2px solid #ff9900; padding-left: 2px; }
+.dasm-addr { color: #336688; min-width: 38px; font-size: 9.5px; }
+.dasm-bytes { color: #1e4060; min-width: 56px; font-size: 9px; }
+.dasm-mnem { color: #7ad4a8; min-width: 48px; }
+.dasm-ops  { color: #b0c8e0; }
+
+/* Breakpoint list */
+.bp-list {
+  padding: 4px 8px 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 24px;
+}
+.bp-chip {
+  background: rgba(255,60,60,.1);
+  border: 1px solid rgba(255,60,60,.3);
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 10px;
+  color: #ff6060;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.bp-chip:hover { background: rgba(255,60,60,.2); }
+
+/* Watch input row */
+.cpu-input-row {
+  display: flex;
+  gap: 4px;
+  padding: 0 8px 8px;
+}
+.cpu-input {
+  flex: 1;
+  background: #0d1a24;
+  border: 1px solid rgba(0,180,255,.2);
+  border-radius: 4px;
+  color: #00b4ff;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  padding: 3px 6px;
+  outline: none;
+}
+.cpu-input:focus { border-color: #00b4ff; }
+.cpu-input::placeholder { color: rgba(0,180,255,.3); }
+
+/* Status bar */
+.mon-status { display:flex; flex-wrap:wrap; gap:4px; padding:6px 8px 8px; }
+.ms-chip { background:#0d1a24; border:1px solid rgba(0,180,255,.12); border-radius:4px;
+           padding:2px 7px; font-size:9px; color:#336688; }
+.ms-chip.ms-run { background:rgba(80,255,120,.08); border-color:rgba(80,255,120,.3); color:#50ff78; }
+.ms-chip.ms-line { color:#ffcc00; border-color:rgba(255,204,0,.3); }
+
+/* Variables */
+.mon-vars { padding:4px 8px 8px; max-height:180px; overflow-y:auto; }
+.mv-row { display:flex; justify-content:space-between; padding:2px 4px;
+          border-radius:3px; font-size:11px; }
+.mv-row.mv-changed { background:rgba(255,204,0,.08); }
+.mv-name { color:#00b4ff; min-width:30px; }
+.mv-val  { color:#e0f4ff; text-align:right; }
+.mv-val.mv-str { color:#a0e8b0; }
+.mv-val.mv-arr { color:#b0a0e8; }
+.mv-empty { font-size:9px; color:#335; padding:4px 4px; display:block; }
+
+/* Program listing */
+.mon-prog { padding:4px 6px 6px; max-height:200px; overflow-y:auto; }
+.pl-row { display:flex; gap:8px; padding:2px 4px; border-radius:3px;
+          cursor:pointer; font-size:10.5px; }
+.pl-row:hover { background:rgba(0,180,255,.06); }
+.pl-row.pl-cur { background:rgba(0,180,255,.14); border-left:2px solid #00b4ff; padding-left:2px; }
+.pl-row.pl-bp  { border-left:2px solid #ff6060; padding-left:2px; background:rgba(255,60,60,.06); }
+.pl-row.pl-cur.pl-bp { border-left:2px solid #ff9900; background:rgba(255,140,0,.12); }
+.pl-ln  { color:#336688; min-width:32px; }
+.pl-src { color:#b0c8e0; }
+
+/* Call stack */
+.mon-stack { padding:4px 8px 8px; max-height:100px; overflow-y:auto; }
+.sk-row { font-size:10px; color:#7ab8d4; padding:2px 0; border-bottom:1px solid rgba(0,180,255,.05); }
+.sk-row b { color:#ffcc00; }
+
+/* Collapsed state */
+.cpu-panel .cpu-body { display: block; }
+.cpu-panel.collapsed .cpu-body { display: none; }
+
+@media(max-width:1100px) {
+  .cpu-monitor { width: 100%; max-width: 580px; }
+  .main-layout { flex-wrap: wrap; }
+}
+
+
+/* ── CPU Monitor tabs ── */
+.cpu-tabs { display:flex; border-bottom:1px solid rgba(0,180,255,.15); }
+.cpu-tab {
+  flex:1; padding:5px 4px; text-align:center;
+  font-family:'Orbitron',sans-serif; font-size:8px; letter-spacing:1px;
+  color:#336688; cursor:pointer; border-bottom:2px solid transparent;
+  transition:all .15s; user-select:none;
+}
+.cpu-tab:hover { color:#00b4ff; }
+.cpu-tab.active { color:#00b4ff; border-bottom-color:#00b4ff; }
+.cpu-tab-body { display:none; }
+.cpu-tab-body.active { display:block; }
+
+/* ── Reg grid (reused) ── */
+.regs-grid2 {
+  display:grid; grid-template-columns:repeat(4,1fr); gap:3px; padding:7px;
+}
+.rc { background:#0d1a24; border:1px solid rgba(0,180,255,.1);
+      border-radius:4px; padding:3px 5px; text-align:center; }
+.rc .rn { font-size:7px; color:#00b4ff; letter-spacing:1px; }
+.rc .rv { font-size:12px; color:#e0f4ff; font-family:'Share Tech Mono',monospace; }
+.rc .rv.chg { color:#ffcc00; }
+.regs-wide2 { display:grid; grid-template-columns:repeat(4,1fr); gap:3px; padding:0 7px 7px; }
+.flags-row2 { display:flex; gap:5px; padding:0 7px 7px; align-items:center; }
+.flag2 { background:#0d1a24; border:1px solid rgba(0,180,255,.1);
+         border-radius:3px; padding:2px 7px; font-size:10px; color:#223344; transition:all .15s; }
+.flag2.on { background:rgba(0,180,255,.15); border-color:#00b4ff; color:#00b4ff; }
+.cyc2 { margin-left:auto; font-size:9px; color:#336; }
+.cyc2 span { color:#00b4ff; }
+
+/* ── Disassembler ── */
+.disasm2 { padding:5px 7px; font-size:10.5px; max-height:220px; overflow-y:auto; }
+.dl { display:flex; gap:6px; padding:2px 3px; border-radius:3px; cursor:pointer; align-items:baseline; }
+.dl:hover { background:rgba(0,180,255,.07); }
+.dl.cur  { background:rgba(0,180,255,.13); border-left:2px solid #00b4ff; padding-left:1px; }
+.dl.bp   { background:rgba(255,60,60,.08); border-left:2px solid #ff6060; padding-left:1px; }
+.dl.cur.bp { background:rgba(255,140,0,.12); border-left:2px solid #ff9900; padding-left:1px; }
+.da { color:#336688; min-width:36px; font-size:9px; }
+.db { color:#1e4060; min-width:52px; font-size:9px; }
+.dm { color:#7ad4a8; min-width:44px; }
+.do { color:#b0c8e0; }
+
+/* ── Memory editor ── */
+.mem-toolbar { display:flex; gap:4px; padding:5px 7px 0; flex-wrap:wrap; align-items:center; }
+.mem-toolbar label { font-size:9px; color:#336688; }
+.mem-hexdump { padding:5px 7px 7px; font-size:10.5px; max-height:190px; overflow-y:auto; }
+.cpu-textarea {
+  width:100%; box-sizing:border-box; background:#060e14;
+  border:1px solid rgba(0,180,255,.2); border-radius:4px;
+  color:#7ad4a8; font-family:'Share Tech Mono',monospace; font-size:10px;
+  padding:4px 6px; resize:vertical; min-height:52px; outline:none;
+  margin:0 7px; width:calc(100% - 14px);
+}
+.cpu-textarea::placeholder { color:rgba(0,180,255,.25); }
+
+</style>
+</head>
+<body>
+
+<header class="page-header">
+  <div class="page-title">SHARP PC-1403</div>
+  <div class="page-sub">Pocket Computer Emulator</div>
+</header>
+
+<div class="main-layout">
+
+<!-- ═══════════════ CALCULATOR ═══════════════ -->
+<div class="calculator" id="calcBody">
+
+  <div class="brand-plate">
+    <div class="brand-sharp">SHARP</div>
+    <div class="power-dot"></div>
+    <div class="brand-model">PC-1403</div>
+  </div>
+
+  <!-- LCD Screen -->
+  <div class="lcd-bezel">
+    <div class="lcd-screen">
+      <canvas id="lcd"></canvas>
+    </div>
+  </div>
+
+  <!-- Status indicators -->
+  <div class="indicators">
+    <span class="ind" id="i-deg" onclick="setAngle('DEG')">DEG</span>
+    <span class="ind" id="i-rad" onclick="setAngle('RAD')">RAD</span>
+    <span class="ind" id="i-gra" onclick="setAngle('GRA')">GRA</span>
+    <span class="ind" id="i-shf">SHIFT</span>
+    <span class="ind" id="i-hyp">HYP</span>
+    <span class="ind" id="i-m">M</span>
+    <span class="ind ind-r" id="i-run">RUN</span>
+    <span class="ind" id="i-pro">PRO</span>
+    <span class="ind" id="i-e">E</span>
+  </div>
+
+  <!-- ═══ KEYBOARD ═══
+    Matches real PC-1403 layout:
+    Top area:  system keys + full QWERTY
+    Bottom area: scientific functions + numeric pad
+  -->
+  <div class="keyboard-wrap" id="kb">
+
+    <!-- ROW 1: system + QWERTY top -->
+    <div class="krow">
+      <button class="k k-sys k-sm" id="offBtn" onclick="kp('OFF')" title="Power ON/OFF"><span class="kl-main" id="offBtnLabel">ON</span><span class="kl-sub">OFF</span></button>
+      <button class="k k-sys k-sm" onclick="kp('MODE')"><span class="kl-main">MODE</span></button>
+      <button class="k k-sys k-sm" onclick="kp('DEF')"><span class="kl-main">DEF</span></button>
+      <div class="kgap"></div>
+      <button class="k k-alpha" onclick="kp('Q')"><span class="kl-main">Q</span></button>
+      <button class="k k-alpha" onclick="kp('W')"><span class="kl-main">W</span></button>
+      <button class="k k-alpha" onclick="kp('E')"><span class="kl-main">E</span></button>
+      <button class="k k-alpha" onclick="kp('R')"><span class="kl-main">R</span></button>
+      <button class="k k-alpha" onclick="kp('T')"><span class="kl-main">T</span></button>
+      <button class="k k-alpha" onclick="kp('Y')"><span class="kl-main">Y</span></button>
+      <button class="k k-alpha" onclick="kp('U')"><span class="kl-main">U</span></button>
+      <button class="k k-alpha" onclick="kp('I')"><span class="kl-main">I</span></button>
+      <button class="k k-alpha" onclick="kp('O')"><span class="kl-main">O</span></button>
+      <button class="k k-alpha" onclick="kp('P')"><span class="kl-main">P</span></button>
+      <div class="kgap"></div>
+      <button class="k k-del k-sm" onclick="kp('BS')"><span class="kl-main">BS</span><span class="kl-sub">DEL</span></button>
+      <button class="k k-del k-sm" onclick="kp('INS')"><span class="kl-main">INS</span></button>
+    </div>
+
+    <!-- ROW 2: SHIFT/CAL + QWERTY middle + ENTER -->
+    <div class="krow">
+      <button class="k k-shift k-sm" id="shiftBtn" onclick="kp('SHIFT')"><span class="kl-main">SHIFT</span></button>
+      <button class="k k-sys k-sm" onclick="kp('CAL')"><span class="kl-main">CAL</span><span class="kl-sub">RUN</span></button>
+      <button class="k k-alpha k-sm" onclick="kp('SPC')"><span class="kl-main">SPC</span></button>
+      <div class="kgap"></div>
+      <button class="k k-alpha" onclick="kp('A')"><span class="kl-main">A</span></button>
+      <button class="k k-alpha" onclick="kp('S')"><span class="kl-main">S</span></button>
+      <button class="k k-alpha" onclick="kp('D')"><span class="kl-main">D</span></button>
+      <button class="k k-alpha" onclick="kp('F')"><span class="kl-main">F</span></button>
+      <button class="k k-alpha" onclick="kp('G')"><span class="kl-main">G</span></button>
+      <button class="k k-alpha" onclick="kp('H')"><span class="kl-main">H</span></button>
+      <button class="k k-alpha" onclick="kp('J')"><span class="kl-main">J</span></button>
+      <button class="k k-alpha" onclick="kp('K')"><span class="kl-main">K</span></button>
+      <button class="k k-alpha" onclick="kp('L')"><span class="kl-main">L</span></button>
+      <button class="k k-alpha" onclick="kp('COLON')"><span class="kl-main">:</span></button>
+      <div class="kgap"></div>
+      <button class="k k-ent k-lg" onclick="kp('ENTER')"><span class="kl-main">ENTER</span></button>
+    </div>
+
+    <!-- ROW 3: QWERTY bottom + CLS -->
+    <div class="krow">
+      <!-- left filler matching 3 system keys width -->
+      <div style="flex:0 0 134px"></div>
+      <div class="kgap"></div>
+      <button class="k k-alpha" onclick="kp('Z')"><span class="kl-main">Z</span></button>
+      <button class="k k-alpha" onclick="kp('X')"><span class="kl-main">X</span></button>
+      <button class="k k-alpha" onclick="kp('C')"><span class="kl-main">C</span></button>
+      <button class="k k-alpha" onclick="kp('V')"><span class="kl-main">V</span></button>
+      <button class="k k-alpha" onclick="kp('B')"><span class="kl-main">B</span></button>
+      <button class="k k-alpha" onclick="kp('N')"><span class="kl-main">N</span></button>
+      <button class="k k-alpha" onclick="kp('M')"><span class="kl-main">M</span></button>
+      <button class="k k-alpha" onclick="kp('COMMA')"><span class="kl-main">,</span></button>
+      <button class="k k-alpha" onclick="kp('DOT2')"><span class="kl-main">.</span></button>
+      <button class="k k-alpha" onclick="kp('SLASH')"><span class="kl-main">/</span></button>
+      <div class="kgap"></div>
+      <button class="k k-del k-sm" onclick="kp('CLS')"><span class="kl-main">CLS</span></button>
+    </div>
+
+    <div class="kdiv"></div>
+
+    <!-- ROW 4: Scientific functions + ( ) M+ MR -->
+    <div class="krow">
+      <button class="k k-fn" onclick="kp('SIN')"><span class="kl-main">SIN</span><span class="kl-sub">ASN</span></button>
+      <button class="k k-fn" onclick="kp('COS')"><span class="kl-main">COS</span><span class="kl-sub">ACS</span></button>
+      <button class="k k-fn" onclick="kp('TAN')"><span class="kl-main">TAN</span><span class="kl-sub">ATN</span></button>
+      <button class="k k-fn" onclick="kp('LOG')"><span class="kl-main">log</span><span class="kl-sub">10ˣ</span></button>
+      <button class="k k-fn" onclick="kp('LN')"><span class="kl-main">ln</span><span class="kl-sub">eˣ</span></button>
+      <button class="k k-fn" onclick="kp('SQR')"><span class="kl-main">√x</span><span class="kl-sub">x²</span></button>
+      <button class="k k-fn" onclick="kp('EXPF')"><span class="kl-main">EXP</span><span class="kl-sub">π</span></button>
+      <div class="kgap"></div>
+      <button class="k k-num k-sm" onclick="kp('PL')"><span class="kl-main">(</span></button>
+      <button class="k k-num k-sm" onclick="kp('PR')"><span class="kl-main">)</span></button>
+      <button class="k k-fn k-sm" onclick="kp('MPLUS')"><span class="kl-main">M+</span><span class="kl-sub">M-</span></button>
+      <button class="k k-fn k-sm" onclick="kp('MR')"><span class="kl-main">MR</span><span class="kl-sub">MC</span></button>
+    </div>
+
+    <!-- ROW 5: More functions + 7 8 9 ÷ -->
+    <div class="krow">
+      <button class="k k-fn" onclick="kp('POW')"><span class="kl-main">xʸ</span><span class="kl-sub">ʸ√x</span></button>
+      <button class="k k-fn" onclick="kp('INV')"><span class="kl-main">1/x</span><span class="kl-sub">x!</span></button>
+      <button class="k k-fn" onclick="kp('HYP')"><span class="kl-main">HYP</span><span class="kl-sub">HYP⁻¹</span></button>
+      <button class="k k-fn" onclick="kp('DMS')"><span class="kl-main">DMS</span><span class="kl-sub">DEG</span></button>
+      <button class="k k-fn" onclick="kp('DEG2')"><span class="kl-main">DEG</span><span class="kl-sub">RAD</span></button>
+      <button class="k k-fn" onclick="kp('FRAC')"><span class="kl-main">FRAC</span><span class="kl-sub">INT</span></button>
+      <button class="k k-fn" onclick="kp('PI')"><span class="kl-main">π</span><span class="kl-sub">2π</span></button>
+      <div class="kgap"></div>
+      <button class="k k-num k-sm" onclick="kp('7')"><span class="kl-main">7</span></button>
+      <button class="k k-num k-sm" onclick="kp('8')"><span class="kl-main">8</span></button>
+      <button class="k k-num k-sm" onclick="kp('9')"><span class="kl-main">9</span></button>
+      <button class="k k-op k-sm" onclick="kp('DIV')"><span class="kl-main">÷</span></button>
+    </div>
+
+    <!-- ROW 6: BASIC keywords + 4 5 6 × -->
+    <div class="krow">
+      <button class="k k-fn" onclick="kp('ABS')"><span class="kl-main">ABS</span><span class="kl-sub">SGN</span></button>
+      <button class="k k-fn" onclick="kp('RND')"><span class="kl-main">RND</span><span class="kl-sub">SEED</span></button>
+      <button class="k k-fn" onclick="kp('FOR_KEY')"><span class="kl-main">FOR</span><span class="kl-sub">NEXT</span></button>
+      <button class="k k-fn" onclick="kp('IF_KEY')"><span class="kl-main">IF</span><span class="kl-sub">THEN</span></button>
+      <button class="k k-fn" onclick="kp('GOTO_KEY')"><span class="kl-main">GOTO</span><span class="kl-sub">GSUB</span></button>
+      <button class="k k-fn" onclick="kp('PRT_KEY')"><span class="kl-main">PRINT</span><span class="kl-sub">INPUT</span></button>
+      <button class="k k-fn" onclick="kp('ANS')"><span class="kl-main">ANS</span><span class="kl-sub">VAL</span></button>
+      <div class="kgap"></div>
+      <button class="k k-num k-sm" onclick="kp('4')"><span class="kl-main">4</span></button>
+      <button class="k k-num k-sm" onclick="kp('5')"><span class="kl-main">5</span></button>
+      <button class="k k-num k-sm" onclick="kp('6')"><span class="kl-main">6</span></button>
+      <button class="k k-op k-sm" onclick="kp('MUL')"><span class="kl-main">×</span></button>
+    </div>
+
+    <!-- ROW 7: More + 1 2 3 − -->
+    <div class="krow">
+      <button class="k k-fn" onclick="kp('EQ')"><span class="kl-main">=</span><span class="kl-sub">&lt;&gt;</span></button>
+      <button class="k k-fn" onclick="kp('LT')"><span class="kl-main">&lt;</span><span class="kl-sub">&lt;=</span></button>
+      <button class="k k-fn" onclick="kp('GT')"><span class="kl-main">&gt;</span><span class="kl-sub">&gt;=</span></button>
+      <button class="k k-fn" onclick="kp('PL2')"><span class="kl-main">(</span><span class="kl-sub">]</span></button>
+      <button class="k k-fn" onclick="kp('POW_KEY')"><span class="kl-main">^</span><span class="kl-sub">E</span></button>
+      <button class="k k-fn" onclick="kp('STAT')"><span class="kl-main">RUN</span><span class="kl-sub">NEW</span></button>
+      <button class="k k-fn" onclick="kp('LIST_KEY')"><span class="kl-main">LIST</span><span class="kl-sub">DATA</span></button>
+      <div class="kgap"></div>
+      <button class="k k-num k-sm" onclick="kp('1')"><span class="kl-main">1</span></button>
+      <button class="k k-num k-sm" onclick="kp('2')"><span class="kl-main">2</span></button>
+      <button class="k k-num k-sm" onclick="kp('3')"><span class="kl-main">3</span></button>
+      <button class="k k-op k-sm" onclick="kp('SUB')"><span class="kl-main">−</span></button>
+    </div>
+
+    <!-- ROW 8: cursor + space + 0 . +/- + -->
+    <div class="krow">
+      <button class="k k-sys k-md" onclick="kp('CUR_L')"><span class="kl-main">◀</span></button>
+      <button class="k k-sys k-md" onclick="kp('CUR_R')"><span class="kl-main">▶</span></button>
+      <button class="k k-fn k-md" onclick="kp('STOP_KEY')"><span class="kl-main">STOP</span><span class="kl-sub">CONT</span></button>
+      <button class="k k-alpha k-xl" onclick="kp('SPACE')"><span class="kl-main">SPACE</span></button>
+      <div class="kgap"></div>
+      <button class="k k-num" onclick="kp('0')" style="flex:0 0 58px"><span class="kl-main">0</span></button>
+      <button class="k k-num k-sm" onclick="kp('DOT')"><span class="kl-main">.</span></button>
+      <button class="k k-num k-sm" onclick="kp('NEG')"><span class="kl-main">+/-</span></button>
+      <button class="k k-op k-sm" onclick="kp('ADD')"><span class="kl-main">+</span></button>
+    </div>
+
+  </div><!-- /keyboard-wrap -->
+</div><!-- /calculator -->
+
+<!-- ═══════════════ TERMINAL PANEL ═══════════════ -->
+<div class="terminal-panel">
+
+  <div class="terminal">
+    <div class="t-header">
+      <div class="t-title">TERMINAL / OUTPUT</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="run-badge" id="runBadge"><div class="run-dot"></div>RUNNING</div>
+        <div class="t-dots">
+          <div class="t-dot dot-r" onclick="clearTerm()" title="Clear output"></div>
+          <div class="t-dot dot-y" onclick="stopProg()" title="Stop program"></div>
+          <div class="t-dot dot-g" onclick="runProg()" title="Run program"></div>
+        </div>
+      </div>
+    </div>
+    <div class="t-out" id="tout">
+      <div class="oline sys">Sharp PC-1403 BASIC Emulator v1.1</div>
+      <div class="oline sys">Ready.</div>
+      <div class="oline">&nbsp;</div>
+    </div>
+    <div class="t-in-row">
+      <span class="t-prompt">&gt;&nbsp;</span>
+      <input id="ti" type="text"
+        placeholder="Type BASIC commands..."
+        autocomplete="off" autocorrect="off"
+        autocapitalize="characters" spellcheck="false">
+      <button class="btn-ent" onclick="doEnter()">ENTER</button>
+    </div>
+  </div>
+
+  <div class="samples">
+    <button class="sbtn" onclick="loadSample('hello')">Hello World</button>
+    <button class="sbtn" onclick="loadSample('fibonacci')">Fibonacci</button>
+    <button class="sbtn" onclick="loadSample('trig')">Trig Table</button>
+    <button class="sbtn" onclick="loadSample('prime')">Prime Finder</button>
+    <button class="sbtn" onclick="loadSample('game')">Guess Game</button>
+    <button class="sbtn" onclick="loadSample('calc')">Calculator</button>
+  </div>
+
+  <div class="help">
+    <div class="help-hdr" onclick="toggleHelp()">
+      <div class="help-ttl">BASIC QUICK REFERENCE</div>
+      <div class="help-arr" id="harr">▼</div>
+    </div>
+    <div class="help-body" id="hbody">
+      <div><b>PRINT</b> "text" / expr</div>
+      <div><b>INPUT</b> "prompt"; var</div>
+      <div><b>LET</b> A = expression</div>
+      <div><b>IF</b> cond <b>THEN</b> stmt</div>
+      <div><b>FOR</b> I=1 <b>TO</b> 10</div>
+      <div><b>NEXT</b> I · <b>GOTO</b> n</div>
+      <div><b>GOSUB</b> n · <b>RETURN</b></div>
+      <div><b>DIM</b> A(10) · <b>DATA</b></div>
+      <div><b>SIN COS TAN</b> (angle)</div>
+      <div><b>LOG LN EXP SQR</b></div>
+      <div><b>ABS INT SGN RND</b></div>
+      <div><b>STR$ CHR$ LEFT$</b></div>
+      <div><b>RUN LIST NEW STOP</b></div>
+      <div>F5=RUN · Ctrl+C=STOP</div>
+    </div>
+  </div>
+
+</div><!-- /terminal-panel -->
+
+<!-- ═══════════ CPU MONITOR ═══════════ -->
+<div class="cpu-monitor" id="cpuMonitor">
+
+  <!-- STATUS + CONTROLS -->
+  <div class="cpu-panel">
+    <div class="cpu-hdr">
+      <div class="cpu-hdr-title">BASIC DEBUGGER</div>
+      <div class="cpu-hdr-btns">
+        <button class="cpu-btn go"     id="dbg-step-btn" onclick="monStep()"    title="Step one BASIC line">STEP</button>
+        <button class="cpu-btn go"     id="dbg-run-btn"  onclick="monRunTo()"   title="Run / continue">RUN</button>
+        <button class="cpu-btn danger" id="dbg-stop-btn" onclick="monStopDbg()" title="Stop execution">STOP</button>
+      </div>
+    </div>
+    <div class="cpu-body">
+      <div class="mon-status" id="mon-status"></div>
+    </div>
+  </div>
+
+  <!-- VARIABLES -->
+  <div class="cpu-panel">
+    <div class="cpu-hdr">
+      <div class="cpu-hdr-title">VARIABLES</div>
+      <div class="cpu-hdr-btns">
+        <button class="cpu-btn" onclick="dbgRefresh()">↻</button>
+      </div>
+    </div>
+    <div class="cpu-body">
+      <div class="mon-vars" id="mon-vars"></div>
+    </div>
+  </div>
+
+  <!-- PROGRAM LISTING -->
+  <div class="cpu-panel">
+    <div class="cpu-hdr">
+      <div class="cpu-hdr-title">PROGRAM LISTING</div>
+      <div class="cpu-hdr-btns">
+        <button class="cpu-btn danger" onclick="monClearBps()">CLR BP</button>
+      </div>
+    </div>
+    <div class="cpu-body">
+      <div class="mon-prog" id="mon-prog"></div>
+      <div class="bp-list"  id="mon-bps"></div>
+    </div>
+  </div>
+
+  <!-- CALL STACK -->
+  <div class="cpu-panel">
+    <div class="cpu-hdr">
+      <div class="cpu-hdr-title">CALL STACK</div>
+    </div>
+    <div class="cpu-body">
+      <div class="mon-stack" id="mon-stack"></div>
+    </div>
+  </div>
+
+  <!-- BASIC RAM DUMP -->
+  <div class="cpu-panel">
+    <div class="cpu-hdr">
+      <div class="cpu-hdr-title">RAM DUMP</div>
+      <div class="cpu-hdr-btns">
+        <button class="cpu-btn" onclick="monRamGo()">GO</button>
+      </div>
+    </div>
+    <div class="cpu-body">
+      <div class="cpu-input-row">
+        <input class="cpu-input" id="mon-ram-addr" placeholder="offset (hex)" maxlength="6"
+               onkeydown="if(event.key==='Enter') monRamGo()">
+      </div>
+      <div class="hexdump" id="mon-ram"></div>
+    </div>
+  </div>
+
+
+  <!-- ── SC61860 CPU MONITOR ── -->
+  <div class="cpu-panel">
+    <div class="cpu-hdr">
+      <div class="cpu-hdr-title">SC61860 CPU MONITOR</div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="cpu-tabs">
+      <div class="cpu-tab active"  id="tab-regs"  onclick="cpuTabShow('regs')">REGS</div>
+      <div class="cpu-tab"         id="tab-dasm"  onclick="cpuTabShow('dasm')">DISASM</div>
+      <div class="cpu-tab"         id="tab-mem"   onclick="cpuTabShow('mem')">MEMORY</div>
+    </div>
+
+    <!-- REGISTERS tab -->
+    <div class="cpu-tab-body active" id="tbd-regs">
+      <div class="regs-grid2">
+        <div class="rc"><div class="rn">A</div><div class="rv" id="cr-A">00</div></div>
+        <div class="rc"><div class="rn">B</div><div class="rv" id="cr-B">00</div></div>
+        <div class="rc"><div class="rn">I</div><div class="rv" id="cr-I">00</div></div>
+        <div class="rc"><div class="rn">J</div><div class="rv" id="cr-J">00</div></div>
+        <div class="rc"><div class="rn">K</div><div class="rv" id="cr-K">00</div></div>
+        <div class="rc"><div class="rn">L</div><div class="rv" id="cr-L">00</div></div>
+        <div class="rc"><div class="rn">M</div><div class="rv" id="cr-M">00</div></div>
+        <div class="rc"><div class="rn">N</div><div class="rv" id="cr-N">00</div></div>
+        <div class="rc"><div class="rn">P</div><div class="rv" id="cr-P">00</div></div>
+        <div class="rc"><div class="rn">Q</div><div class="rv" id="cr-Q">00</div></div>
+        <div class="rc"><div class="rn">R</div><div class="rv" id="cr-R">5B</div></div>
+        <div class="rc"><div class="rn">H</div><div class="rv" id="cr-H">00</div></div>
+      </div>
+      <div class="regs-wide2">
+        <div class="rc"><div class="rn">PC</div><div class="rv" id="cr-PC">0000</div></div>
+        <div class="rc"><div class="rn">DP</div><div class="rv" id="cr-DP">0000</div></div>
+        <div class="rc"><div class="rn">X</div> <div class="rv" id="cr-X">0000</div></div>
+        <div class="rc"><div class="rn">Y</div> <div class="rv" id="cr-Y">0000</div></div>
+      </div>
+      <div class="flags-row2">
+        <span class="flag2" id="cf-C">C</span>
+        <span class="flag2" id="cf-Z">Z</span>
+        <span class="flag2" id="cf-H">HALT</span>
+        <div class="cyc2">CYCLES <span id="cr-CYC">0</span></div>
+      </div>
+      <div class="cpu-hdr-btns" style="padding:0 7px 7px;gap:4px;display:flex;">
+        <button class="cpu-btn go"    onclick="cpuStep()"  title="Step one instruction">STEP</button>
+        <button class="cpu-btn go"    id="cpuRunBtn" onclick="cpuRun()"  title="Run/Pause">RUN</button>
+        <button class="cpu-btn danger" onclick="cpuReset()" title="Reset CPU">RST</button>
+      </div>
+    </div>
+
+    <!-- DISASSEMBLER tab -->
+    <div class="cpu-tab-body" id="tbd-dasm">
+      <div class="cpu-input-row" style="padding:5px 7px 0;">
+        <input class="cpu-input" id="dasm-addr" placeholder="addr (hex)" maxlength="6"
+               onkeydown="if(event.key==='Enter') cpuDisasmAt(parseInt(this.value,16)||0)">
+        <button class="cpu-btn" onclick="cpuDisasmAt(parseInt(document.getElementById('dasm-addr').value,16)||0)">GO</button>
+        <button class="cpu-btn" onclick="cpuDisasmAt(cpuCore.PC)">@PC</button>
+        <button class="cpu-btn" onclick="cpuBpToggle(cpuCore.PC)">BP</button>
+        <button class="cpu-btn danger" onclick="cpuBpClear()">CLR</button>
+      </div>
+      <div class="disasm2" id="cpu-dasm"></div>
+      <div class="bp-list"  id="cpu-bps" style="padding:4px 7px 7px;"></div>
+    </div>
+
+    <!-- MEMORY tab -->
+    <div class="cpu-tab-body" id="tbd-mem">
+      <div class="mem-toolbar">
+        <label>View addr:</label>
+        <input class="cpu-input" id="mem-view-addr" placeholder="hex" maxlength="6" style="width:70px;"
+               onkeydown="if(event.key==='Enter') cpuMemView()">
+        <button class="cpu-btn" onclick="cpuMemView()">GO</button>
+        <button class="cpu-btn" onclick="cpuMemViewAt(cpuCore.PC)">@PC</button>
+        <button class="cpu-btn" onclick="cpuMemViewAt(cpuCore.DP)">@DP</button>
+      </div>
+      <div class="mem-hexdump" id="cpu-mem"></div>
+      <div style="padding:3px 7px 3px;font-size:9px;color:#336688;">LOAD HEX — addr (hex) + space + bytes (hex pairs)</div>
+      <textarea class="cpu-textarea" id="cpu-load-input"
+        placeholder="e.g.  0100 LII 05 LIA 03 ADN JP 0100"></textarea>
+      <div class="cpu-input-row" style="padding:4px 7px 7px;">
+        <input class="cpu-input" id="cpu-load-addr" placeholder="load addr (hex)" maxlength="6" style="width:100px;">
+        <button class="cpu-btn go" onclick="cpuLoadHex()">LOAD</button>
+        <button class="cpu-btn" onclick="cpuMemFill()">FILL 00</button>
+        <button class="cpu-btn" onclick="document.getElementById('cpu-load-input').value=cpuMemDumpHex()">DUMP</button>
+      </div>
+    </div>
+
+  </div><!-- /SC61860 CPU MONITOR panel -->
+
+</div><!-- /cpu-monitor -->
+
+</div><!-- /main-layout -->
+
+<footer>
+  <div>Sharp PC-1403 Web Emulator · SC61860 CPU Architecture</div>
+  <div>
+    <a href="https://github.com/matsumo/PockEmul" target="_blank">PockEmul</a> ·
+    <a href="https://github.com/utz82/SC61860-Instruction-Set" target="_blank">SC61860 ISA</a>
+  </div>
+</footer>
+
+<script>
+// ===== SC61860 CPU =====
+/**
+ * SC61860 CPU Emulator
+ * Sharp PC-1403 pocket computer CPU emulation
+ * Based on ESR-H architecture by Hitachi
+ * 
+ * Architecture:
+ * - 8-bit data bus, 64KB address space
+ * - 96 bytes internal RAM (scratchpad)
+ * - Registers: A, B, I, J, K, L, M, N (8-bit)
+ * - Pointers: P, Q, R (7-bit, internal RAM)
+ * - Data pointer: DP (16-bit)
+ * - Program counter: PC (16-bit)
+ * - X, Y (16-bit RAM pointers mapped to internal RAM)
+ * - Flags: carry (c), zero (z)
+ */
+
+class SC61860 {
+  constructor(memory) {
+    this.mem = memory; // external memory interface
+
+    // Internal RAM: 96 bytes
+    this.iram = new Uint8Array(96);
+
+    // 16-bit registers (not in iram directly)
+    this.PC = 0x0000;
+    this.DP = 0x0000;
+
+    // Internal RAM pointer registers (7-bit)
+    this._P = 0x00;
+    this._Q = 0x00;
+    this._R = 0x5B; // stack starts at 0x5B
+
+    // Flags
+    this.carry = 0;
+    this.zero = 0;
+
+    // H pseudo-register
+    this.H = 0;
+
+    // Cycle counter
+    this.cycles = 0;
+
+    // Halted state
+    this.halted = false;
+
+    // I/O ports
+    this.portIA = 0x00;
+    this.portIB = 0x00;
+    this.portF0 = 0x00;
+    this.portC  = 0x00;
+
+    // Callbacks for I/O
+    this.onOutA = null;
+    this.onOutB = null;
+    this.onOutC = null;
+    this.onOutF = null;
+    this.onInA  = null;
+    this.onInB  = null;
+  }
+
+  // ─── Internal RAM register getters/setters ────────────────────────────────
+  get A()  { return this.iram[0x02]; }
+  set A(v) { this.iram[0x02] = v & 0xFF; }
+
+  get B()  { return this.iram[0x03]; }
+  set B(v) { this.iram[0x03] = v & 0xFF; }
+
+  get I()  { return this.iram[0x00]; }
+  set I(v) { this.iram[0x00] = v & 0xFF; }
+
+  get J()  { return this.iram[0x01]; }
+  set J(v) { this.iram[0x01] = v & 0xFF; }
+
+  get K()  { return this.iram[0x08]; }
+  set K(v) { this.iram[0x08] = v & 0xFF; }
+
+  get L()  { return this.iram[0x09]; }
+  set L(v) { this.iram[0x09] = v & 0xFF; }
+
+  get M()  { return this.iram[0x0A]; }
+  set M(v) { this.iram[0x0A] = v & 0xFF; }
+
+  get N()  { return this.iram[0x0B]; }
+  set N(v) { this.iram[0x0B] = v & 0xFF; }
+
+  // X = 16-bit pointer at iram[0x04..0x05]
+  get Xl() { return this.iram[0x04]; }
+  set Xl(v){ this.iram[0x04] = v & 0xFF; }
+  get Xh() { return this.iram[0x05]; }
+  set Xh(v){ this.iram[0x05] = v & 0xFF; }
+  get X()  { return (this.iram[0x05] << 8) | this.iram[0x04]; }
+  set X(v) { this.iram[0x04] = v & 0xFF; this.iram[0x05] = (v >> 8) & 0xFF; }
+
+  // Y = 16-bit pointer at iram[0x06..0x07]
+  get Yl() { return this.iram[0x06]; }
+  set Yl(v){ this.iram[0x06] = v & 0xFF; }
+  get Yh() { return this.iram[0x07]; }
+  set Yh(v){ this.iram[0x07] = v & 0xFF; }
+  get Y()  { return (this.iram[0x07] << 8) | this.iram[0x06]; }
+  set Y(v) { this.iram[0x06] = v & 0xFF; this.iram[0x07] = (v >> 8) & 0xFF; }
+
+  // P, Q, R (7-bit internal RAM pointers)
+  get P()  { return this._P & 0x7F; }
+  set P(v) { this._P = v & 0x7F; }
+  get Q()  { return this._Q & 0x7F; }
+  set Q(v) { this._Q = v & 0x7F; }
+  get R()  { return this._R & 0x7F; }
+  set R(v) { this._R = v & 0x7F; }
+
+  // ─── Memory read/write ────────────────────────────────────────────────────
+  readMem(addr) {
+    return this.mem.read(addr & 0xFFFF);
+  }
+
+  writeMem(addr, val) {
+    this.mem.write(addr & 0xFFFF, val & 0xFF);
+  }
+
+  // Internal RAM read (used by instructions referencing P,Q,R)
+  readIram(addr) {
+    addr &= 0x7F;
+    if (addr >= 0x5B && addr <= 0x5E) {
+      // I/O mapped area
+      if (addr === 0x5C) return this.portIA;
+      if (addr === 0x5D) return this.portIB;
+      if (addr === 0x5E) return this.portF0;
+    }
+    if (addr < 96) return this.iram[addr];
+    return 0;
+  }
+
+  writeIram(addr, val) {
+    addr &= 0x7F;
+    val &= 0xFF;
+    if (addr < 96) this.iram[addr] = val;
+  }
+
+  // ─── Flag helpers ─────────────────────────────────────────────────────────
+  setZero(v)  { this.zero  = (v === 0) ? 1 : 0; }
+  setCarry(v) { this.carry = (v >> 8) & 1; }
+  setFlags(v) { this.setCarry(v); this.setZero(v & 0xFF); }
+
+  // ─── Stack operations ─────────────────────────────────────────────────────
+  stackPush(val) {
+    this.writeIram(this.R, val & 0xFF);
+    this.R = (this.R - 1) & 0x7F;
+  }
+
+  stackPop() {
+    this.R = (this.R + 1) & 0x7F;
+    return this.readIram(this.R);
+  }
+
+  // Push 16-bit address (PC) onto stack
+  pushAddr(addr) {
+    this.stackPush(addr & 0xFF);         // low byte first
+    this.stackPush((addr >> 8) & 0xFF);  // high byte
+    // R now points to high byte location - 1
+  }
+
+  // Pop 16-bit address from stack
+  popAddr() {
+    const hi = this.stackPop();
+    const lo = this.stackPop();
+    return ((hi << 8) | lo) & 0xFFFF;
+  }
+
+  // ─── Fetch helpers ────────────────────────────────────────────────────────
+  fetch8() {
+    const v = this.readMem(this.PC);
+    this.PC = (this.PC + 1) & 0xFFFF;
+    return v;
+  }
+
+  fetch16() {
+    const hi = this.fetch8();
+    const lo = this.fetch8();
+    return (hi << 8) | lo;
+  }
+
+  // ─── BCD multi-byte operations ────────────────────────────────────────────
+  bcdAdd(n) {
+    let carry = 0;
+    for (let i = 0; i <= n; i++) {
+      let a = this.readIram(this.P);
+      let sum;
+      if (i === 0) sum = a + this.A + carry;
+      else         sum = a + carry;
+      // BCD adjust
+      if ((sum & 0x0F) > 9) sum += 6;
+      if ((sum >> 4) > 9)   sum += 0x60;
+      carry = (sum > 0x99) ? 1 : 0;
+      this.writeIram(this.P, sum & 0xFF);
+      this.P = (this.P - 1) & 0x7F;
+    }
+    this.carry = carry;
+    this.P = (this.P - 1) & 0x7F;
+  }
+
+  bcdSub(n) {
+    let borrow = 0;
+    for (let i = 0; i <= n; i++) {
+      let a = this.readIram(this.P);
+      let diff;
+      if (i === 0) diff = a - this.A - borrow;
+      else         diff = a - borrow;
+      if ((diff & 0x0F) > 9) diff -= 6;
+      if (diff < 0)          diff -= 0x60;
+      borrow = (diff < 0) ? 1 : 0;
+      this.writeIram(this.P, diff & 0xFF);
+      this.P = (this.P - 1) & 0x7F;
+    }
+    this.carry = borrow;
+    this.P = (this.P - 1) & 0x7F;
+  }
+
+  // ─── Main step ───────────────────────────────────────────────────────────
+  step() {
+    if (this.halted) return 1;
+
+    const opcode = this.fetch8();
+    let cycles = 2;
+
+    switch (opcode) {
+      // ── LII, LIJ, LIA, LIB ─────────────────────────────────────────────
+      case 0x00: this.I = this.fetch8(); cycles=4; break;
+      case 0x01: this.J = this.fetch8(); cycles=4; break;
+      case 0x02: { const n=this.fetch8(); this.A=n; this.H=n; cycles=4; } break;
+      case 0x03: { const n=this.fetch8(); this.B=n; cycles=4; } break;
+
+      // ── IX, IY, DX, DY ──────────────────────────────────────────────────
+      case 0x04: { // IX
+        this.X = (this.X+1)&0xFFFF; this.DP=this.X; this.Q=5; this.H=this.Xh;
+        cycles=6;
+      } break;
+      case 0x05: { // DX
+        this.X = (this.X-1)&0xFFFF; this.DP=this.X; this.Q=5; this.H=this.Xl;
+        cycles=6;
+      } break;
+      case 0x06: { // IY
+        this.Y = (this.Y+1)&0xFFFF; this.DP=this.Y; this.Q=7; this.H=this.Yh;
+        cycles=6;
+      } break;
+      case 0x07: { // DY
+        this.Y = (this.Y-1)&0xFFFF; this.DP=this.Y; this.Q=7; this.H=this.Yl;
+        cycles=6;
+      } break;
+
+      // ── MVW, EXW, MVB, EXB ──────────────────────────────────────────────
+      case 0x08: { // MVW: (Q)..(Q+I) -> (P)..(P+I)
+        for(let i=0;i<=this.I;i++){
+          this.writeIram((this.P+i)&0x7F, this.readIram((this.Q+i)&0x7F));
+        }
+        this.P=(this.P+this.I+1)&0x7F;
+        this.Q=(this.Q+this.I+1)&0x7F;
+        cycles=5+2*this.I;
+      } break;
+      case 0x09: { // EXW
+        for(let i=0;i<=this.I;i++){
+          const t=this.readIram((this.P+i)&0x7F);
+          this.writeIram((this.P+i)&0x7F, this.readIram((this.Q+i)&0x7F));
+          this.writeIram((this.Q+i)&0x7F, t);
+        }
+        this.P=(this.P+this.I+1)&0x7F;
+        this.Q=(this.Q+this.I+1)&0x7F;
+        cycles=6+3*this.I;
+      } break;
+      case 0x0A: { // MVB: (Q)..(Q+J) -> (P)..(P+J)
+        for(let i=0;i<=this.J;i++){
+          this.writeIram((this.P+i)&0x7F, this.readIram((this.Q+i)&0x7F));
+        }
+        this.P=(this.P+this.J+1)&0x7F;
+        this.Q=(this.Q+this.J+1)&0x7F;
+        cycles=5+2*this.J;
+      } break;
+      case 0x0B: { // EXB
+        for(let i=0;i<=this.J;i++){
+          const t=this.readIram((this.P+i)&0x7F);
+          this.writeIram((this.P+i)&0x7F, this.readIram((this.Q+i)&0x7F));
+          this.writeIram((this.Q+i)&0x7F, t);
+        }
+        this.P=(this.P+this.J+1)&0x7F;
+        this.Q=(this.Q+this.J+1)&0x7F;
+        cycles=6+3*this.J;
+      } break;
+
+      // ── ADN, SBN, ADW, SBW ──────────────────────────────────────────────
+      case 0x0C: { // ADN - BCD add n+1 bytes at P, using A
+        this.bcdAdd(this.I);
+        cycles=7+3*this.I;
+      } break;
+      case 0x0D: { // SBN
+        this.bcdSub(this.I);
+        cycles=7+3*this.I;
+      } break;
+      case 0x0E: { // ADW - BCD add I+1 bytes (P) + (Q)
+        let carry=0;
+        for(let i=0;i<=this.I;i++){
+          const pa=(this.P-i)&0x7F, qa=(this.Q-i)&0x7F;
+          let sum=this.readIram(pa)+this.readIram(qa)+carry;
+          if((sum&0xF)>9) sum+=6;
+          if((sum>>4)>9)  sum+=0x60;
+          carry=(sum>0x99)?1:0;
+          this.writeIram(pa,sum&0xFF);
+        }
+        this.carry=carry;
+        this.P=(this.P-this.I-1)&0x7F;
+        this.Q=(this.Q-this.I-2)&0x7F;
+        cycles=7+3*this.I;
+      } break;
+      case 0x0F: { // SBW
+        let borrow=0;
+        for(let i=0;i<=this.I;i++){
+          const pa=(this.P-i)&0x7F, qa=(this.Q-i)&0x7F;
+          let diff=this.readIram(pa)-this.readIram(qa)-borrow;
+          if((diff&0xF)>9) diff-=6;
+          if(diff<0) diff-=0x60;
+          borrow=(diff<0)?1:0;
+          this.writeIram(pa,diff&0xFF);
+        }
+        this.carry=borrow;
+        this.P=(this.P-this.I-1)&0x7F;
+        this.Q=(this.Q-this.I-2)&0x7F;
+        cycles=7+3*this.I;
+      } break;
+
+      // ── LIDP, LIDL ──────────────────────────────────────────────────────
+      case 0x10: { // LIDP nm
+        const hi=this.fetch8(), lo=this.fetch8();
+        this.DP=(hi<<8)|lo; this.H=hi;
+        cycles=8;
+      } break;
+      case 0x11: { // LIDL n
+        const n=this.fetch8();
+        this.DP=(this.DP&0xFF00)|n; this.H=n;
+        cycles=5;
+      } break;
+
+      // ── LIP, LIQ ────────────────────────────────────────────────────────
+      case 0x12: { const n=this.fetch8(); this.P=n; this.H=0; cycles=4; } break;
+      case 0x13: { const n=this.fetch8(); this.Q=n; this.H=n; cycles=4; } break;
+
+      // ── ADB, SBB ────────────────────────────────────────────────────────
+      case 0x14: { // ADB
+        let r=(this.readIram(this.P)+this.A)&0xFF;
+        this.writeIram(this.P,r);
+        let r2=(this.readIram((this.P+1)&0x7F)+this.B+this.carry);
+        this.carry=(r2>>8)&1; r2&=0xFF;
+        this.writeIram((this.P+1)&0x7F,r2);
+        this.P=(this.P+1)&0x7F;
+        this.setZero(r2);
+        cycles=5;
+      } break;
+      case 0x15: { // SBB
+        let r=this.readIram(this.P)-this.A;
+        const borrow1=(r<0)?1:0; r&=0xFF;
+        this.writeIram(this.P,r);
+        let r2=this.readIram((this.P+1)&0x7F)-this.B-borrow1;
+        this.carry=(r2<0)?1:0; r2&=0xFF;
+        this.writeIram((this.P+1)&0x7F,r2);
+        this.P=(this.P+1)&0x7F;
+        this.setZero(r2);
+        cycles=5;
+      } break;
+
+      // ── MVWD, EXWD, MVBD, EXBD ──────────────────────────────────────────
+      case 0x18: { // MVWD: (DP)..(DP+I) -> (P)..(P+I)
+        for(let i=0;i<=this.I;i++){
+          this.writeIram((this.P+i)&0x7F, this.readMem((this.DP+i)&0xFFFF));
+        }
+        this.P=(this.P+this.I+1)&0x7F;
+        this.DP=(this.DP+this.I)&0xFFFF;
+        cycles=5+4*this.I;
+      } break;
+      case 0x19: { // EXWD
+        for(let i=0;i<=this.I;i++){
+          const t=this.readIram((this.P+i)&0x7F);
+          this.writeIram((this.P+i)&0x7F, this.readMem((this.DP+i)&0xFFFF));
+          this.writeMem((this.DP+i)&0xFFFF, t);
+        }
+        this.P=(this.P+this.I+1)&0x7F;
+        this.DP=(this.DP+this.I)&0xFFFF;
+        cycles=7+6*this.I;
+      } break;
+      case 0x1A: { // MVBD
+        for(let i=0;i<=this.J;i++){
+          this.writeIram((this.P+i)&0x7F, this.readMem((this.DP+i)&0xFFFF));
+        }
+        this.P=(this.P+this.J+1)&0x7F;
+        this.DP=(this.DP+this.J)&0xFFFF;
+        cycles=5+4*this.J;
+      } break;
+      case 0x1B: { // EXBD
+        for(let i=0;i<=this.J;i++){
+          const t=this.readIram((this.P+i)&0x7F);
+          this.writeIram((this.P+i)&0x7F, this.readMem((this.DP+i)&0xFFFF));
+          this.writeMem((this.DP+i)&0xFFFF, t);
+        }
+        this.P=(this.P+this.J+1)&0x7F;
+        this.DP=(this.DP+this.J)&0xFFFF;
+        cycles=7+6*this.J;
+      } break;
+
+      // ── SRW, SLW ────────────────────────────────────────────────────────
+      case 0x1C: { // SRW: shift right by 4 bits, I+1 bytes
+        for(let i=0;i<=this.I;i++){
+          const cur=this.readIram((this.P+i)&0x7F);
+          const next=(i<this.I)?this.readIram((this.P+i+1)&0x7F):0;
+          this.writeIram((this.P+i)&0x7F, ((cur>>4)|(next<<4))&0xFF);
+        }
+        this.P=(this.P+this.I+1)&0x7F;
+        cycles=5+this.I;
+      } break;
+      case 0x1D: { // SLW: shift left by 4 bits
+        for(let i=this.I;i>=0;i--){
+          const cur=this.readIram((this.P-i)&0x7F);
+          const prev=(i>0)?this.readIram((this.P-i+1)&0x7F):0;
+          this.writeIram((this.P-i)&0x7F, ((cur<<4)|(prev>>4))&0xFF);
+        }
+        this.P=(this.P-this.I-1)&0x7F;
+        cycles=5+this.I;
+      } break;
+
+      // ── FILM, FILD ──────────────────────────────────────────────────────
+      case 0x1E: { // FILM: fill I+1 bytes at P with A
+        for(let i=0;i<=this.I;i++){
+          this.writeIram(this.P, this.A);
+          this.P=(this.P+1)&0x7F;
+        }
+        this.H=this.A;
+        cycles=5+this.I;
+      } break;
+      case 0x1F: { // FILD: fill I+1 bytes at DP with A
+        for(let i=0;i<=this.I;i++){
+          this.writeMem(this.DP, this.A);
+          this.DP=(this.DP+1)&0xFFFF;
+        }
+        cycles=4+3*this.I;
+      } break;
+
+      // ── LDP, LDQ, LDR ────────────────────────────────────────────────────
+      case 0x20: this.A=this.P; cycles=2; break;
+      case 0x21: this.A=this.Q; cycles=2; break;
+      case 0x22: this.A=this.R; cycles=2; break;
+      case 0x23: this.A=0; this.H=0; cycles=2; break; // CLRA
+
+      // ── IXL, IYS, DXL, DYS ──────────────────────────────────────────────
+      case 0x24: { // IXL: IX + load A from (DP)
+        this.X=(this.X+1)&0xFFFF; this.DP=this.X;
+        this.A=this.readMem(this.DP); this.Q=5;
+        cycles=7;
+      } break;
+      case 0x25: { // DXL
+        this.X=(this.X-1)&0xFFFF; this.DP=this.X;
+        this.A=this.readMem(this.DP); this.Q=5; this.H=this.Xl;
+        cycles=7;
+      } break;
+      case 0x26: { // IYS: IY + store A to (DP)
+        this.Y=(this.Y+1)&0xFFFF; this.DP=this.Y;
+        this.writeMem(this.DP, this.A); this.Q=7;
+        cycles=7;
+      } break;
+      case 0x27: { // DYS
+        this.Y=(this.Y-1)&0xFFFF; this.DP=this.Y;
+        this.writeMem(this.DP, this.A); this.Q=7; this.H=this.Yl;
+        cycles=7;
+      } break;
+
+      // ── JRP, JRM ─────────────────────────────────────────────────────────
+      case 0x2C: { const n=this.fetch8(); this.PC=(this.PC+1+n)&0xFFFF; cycles=7; } break;
+      case 0x2D: { const n=this.fetch8(); this.PC=(this.PC+1-n)&0xFFFF; cycles=7; } break;
+
+      // ── JRNZP, JRNZM ─────────────────────────────────────────────────────
+      case 0x28: { const n=this.fetch8(); if(!this.zero){ this.PC=(this.PC+1+n)&0xFFFF; cycles=7;} else cycles=4; } break;
+      case 0x29: { const n=this.fetch8(); if(!this.zero){ this.PC=(this.PC+1-n)&0xFFFF; cycles=7;} else cycles=4; } break;
+      case 0x2A: { const n=this.fetch8(); if(!this.carry){ this.PC=(this.PC+1+n)&0xFFFF; cycles=7;} else cycles=4; } break;
+      case 0x2B: { const n=this.fetch8(); if(!this.carry){ this.PC=(this.PC+1-n)&0xFFFF; cycles=7;} else cycles=4; } break;
+      case 0x2F: { // LOOP: (R)-1 -> (R), if c=0 jump back
+        const n=this.fetch8();
+        let cnt=this.readIram(this.R)-1;
+        this.writeIram(this.R, cnt&0xFF);
+        if((cnt&0xFF)!==0 && !this.carry){ this.PC=(this.PC+1-n)&0xFFFF; cycles=10;}
+        else { this.carry=0; cycles=7; }
+      } break;
+
+      // ── STP, STQ, STR, STH ────────────────────────────────────────────────
+      case 0x30: this.P=this.A; this.H=this.A; cycles=2; break;
+      case 0x31: this.Q=this.A; this.H=this.A; cycles=2; break;
+      case 0x32: this.R=this.A; cycles=2; break;
+      case 0x33: this.H=this.A; cycles=2; break; // STH
+
+      // ── PUSH ─────────────────────────────────────────────────────────────
+      case 0x34: this.stackPush(this.A); cycles=3; break;
+
+      // ── DATA: read I+1 bytes from internal ROM at BA -> (P) ──────────────
+      case 0x35: {
+        // For PC-1403, internal ROM is at 0x0000-0x11FF (system area)
+        // BA = (B<<8)|A pointer into internal ROM
+        const base=(this.B<<8)|this.A;
+        for(let i=0;i<=this.I;i++){
+          this.writeIram(this.P, this.readMem((base+i)&0xFFFF));
+          this.P=(this.P+1)&0x7F;
+        }
+        cycles=11+4*this.I;
+      } break;
+
+      // ── RTN ──────────────────────────────────────────────────────────────
+      case 0x37: {
+        this.PC=this.popAddr();
+        cycles=4;
+      } break;
+
+      // ── JRZP, JRZM, JRCM, JRCP ───────────────────────────────────────────
+      case 0x38: { const n=this.fetch8(); if(this.zero){ this.PC=(this.PC+1+n)&0xFFFF; cycles=7;} else cycles=4; } break;
+      case 0x39: { const n=this.fetch8(); if(this.zero){ this.PC=(this.PC+1-n)&0xFFFF; cycles=7;} else cycles=4; } break;
+      case 0x3A: { const n=this.fetch8(); if(this.carry){ this.PC=(this.PC+1+n)&0xFFFF; cycles=7;} else cycles=4; } break;
+      case 0x3B: { const n=this.fetch8(); if(this.carry){ this.PC=(this.PC+1-n)&0xFFFF; cycles=7;} else cycles=4; } break;
+
+      // ── INCI, INCJ, INCA, INCB, INCK, INCL, INCM, INCN ─────────────────
+      case 0x40: { const r=(this.I+1)&0xFF; this.I=r; this.Q=0; this.setFlags(r); cycles=4; } break;
+      case 0x41: { const r=(this.I-1)&0xFF; this.I=r; this.Q=0; this.setFlags(r); cycles=4; } break;
+      case 0x42: { const r=(this.A+1)&0xFF; this.A=r; this.Q=2; this.setFlags(r); cycles=4; } break;
+      case 0x43: { const r=(this.A-1)&0xFF; this.A=r; this.Q=2; this.setFlags(r); cycles=4; } break;
+      case 0x44: { // ADM: (P)+A -> (P)
+        const r=this.readIram(this.P)+this.A;
+        this.setFlags(r); this.writeIram(this.P,r&0xFF); cycles=3;
+      } break;
+      case 0x45: { // SBM
+        const r=this.readIram(this.P)-this.A;
+        this.setFlags(r); this.writeIram(this.P,r&0xFF); cycles=3;
+      } break;
+      case 0x46: { // ANMA
+        const r=this.readIram(this.P)&this.A;
+        this.zero=(r===0)?1:0; this.writeIram(this.P,r); cycles=3;
+      } break;
+      case 0x47: { // ORMA
+        const r=this.readIram(this.P)|this.A;
+        this.zero=(r===0)?1:0; this.writeIram(this.P,r); cycles=3;
+      } break;
+      case 0x48: { const r=(this.K+1)&0xFF; this.K=r; this.Q=8; this.setFlags(r); cycles=4; } break;
+      case 0x49: { const r=(this.K-1)&0xFF; this.K=r; this.Q=8; this.setFlags(r); cycles=4; } break;
+      case 0x4A: { const r=(this.M+1)&0xFF; this.M=r; this.Q=10; this.setFlags(r); cycles=4; } break;
+      case 0x4B: { const r=(this.M-1)&0xFF; this.M=r; this.Q=10; this.setFlags(r); cycles=4; } break;
+      case 0x4C: { // INA
+        this.A=(this.onInA)?this.onInA():this.portIA;
+        this.zero=(this.A===0)?1:0; cycles=2;
+      } break;
+      case 0x4D: cycles=2; break; // NOPW
+      case 0x4E: { const n=this.fetch8(); cycles=6+n; } break; // WAIT n
+      case 0x4F: cycles=2; break; // CUP (simplified)
+
+      // ── INCP, DECP ───────────────────────────────────────────────────────
+      case 0x50: this.P=(this.P+1)&0x7F; cycles=2; break;
+      case 0x51: this.P=(this.P-1)&0x7F; cycles=2; break;
+
+      // ── STD, MVDM, MVMP, MVMD, LDD ───────────────────────────────────────
+      case 0x52: this.writeMem(this.DP, this.A); cycles=2; break;
+      case 0x53: this.writeMem(this.DP, this.readIram(this.P)); cycles=3; break;
+      case 0x54: this.writeIram(this.P, this.readMem(this.PC+1)); cycles=3; break; // MVMP
+      case 0x55: this.writeIram(this.P, this.readMem(this.DP)); cycles=3; break;   // MVMD
+      case 0x56: { // LDPC: A <- (PC+1)
+        this.A=this.readMem(this.PC+1); cycles=3;
+      } break;
+      case 0x57: this.A=this.readMem(this.DP); cycles=3; break; // LDD
+      case 0x58: this.A=((this.A>>4)|(this.A<<4))&0xFF; cycles=2; break; // SWP
+      case 0x59: this.A=this.readIram(this.P); cycles=2; break; // LDM
+      case 0x5A: { // SL: shift left with carry
+        const c=(this.A>>7)&1;
+        this.A=((this.A<<1)|this.carry)&0xFF;
+        this.carry=c; cycles=2;
+      } break;
+      case 0x5B: { // POP
+        this.A=this.stackPop(); cycles=2;
+      } break;
+      case 0x5D: { // OUTA
+        this.portIA=this.readIram(0x5C);
+        if(this.onOutA) this.onOutA(this.portIA);
+        this.Q=0x5C; cycles=3;
+      } break;
+      case 0x5F: { // OUTF
+        this.portF0=this.readIram(0x5E);
+        if(this.onOutF) this.onOutF(this.portF0);
+        this.Q=0x5E; cycles=3;
+      } break;
+
+      // ── TSIM, ANIM, SBIM, CPIM ───────────────────────────────────────────
+      case 0x60: { const n=this.fetch8(); const r=(this.readIram(this.P)&n); this.zero=(r===0)?1:0; this.writeIram(this.P,r); cycles=4; } break; // ANIM
+      case 0x61: { const n=this.fetch8(); const r=(this.readIram(this.P)|n); this.zero=(r===0)?1:0; this.writeIram(this.P,r); cycles=4; } break; // ORIM
+      case 0x62: { const n=this.fetch8(); this.zero=((this.readIram(this.P)&n)===0)?1:0; cycles=4; } break; // TSIM
+      case 0x63: { // CPIM
+        const n=this.fetch8(); const r=this.readIram(this.P)-n;
+        this.carry=(r<0)?1:0; this.zero=((r&0xFF)===0)?1:0; cycles=4;
+      } break;
+      case 0x64: { const n=this.fetch8(); const r=(this.A&n)&0xFF; this.zero=(r===0)?1:0; this.A=r; cycles=4; } break; // ANIA
+      case 0x65: { const n=this.fetch8(); const r=(this.A|n)&0xFF; this.zero=(r===0)?1:0; this.A=r; cycles=4; } break; // ORIA
+      case 0x66: { const n=this.fetch8(); this.zero=((this.A&n)===0)?1:0; cycles=4; } break; // TSIA
+      case 0x67: { // CPIA
+        const n=this.fetch8(); const r=this.A-n;
+        this.carry=(r<0)?1:0; this.zero=((r&0xFF)===0)?1:0; cycles=4;
+      } break;
+
+      // ── ADM2 (ADIM), SBIM2 (SBIM) ────────────────────────────────────────
+      case 0x70: { const n=this.fetch8(); const r=this.readIram(this.P)+n; this.setFlags(r); this.writeIram(this.P,r&0xFF); cycles=4; } break;
+      case 0x71: { const n=this.fetch8(); const r=this.readIram(this.P)-n; this.setFlags(r); this.writeIram(this.P,r&0xFF); cycles=4; } break;
+      case 0x74: { const n=this.fetch8(); const r=this.A+n; this.setFlags(r); this.A=r&0xFF; cycles=4; } break; // ADIA
+      case 0x75: { const n=this.fetch8(); const r=this.A-n; this.setFlags(r); this.A=r&0xFF; cycles=4; } break; // SBIA
+
+      // ── HALT ─────────────────────────────────────────────────────────────
+      case 0x7B: this.halted=true; cycles=1; break;
+
+      // ── JP, CALL, RTN, JPNZ, JPNC, JPZ, JPC ─────────────────────────────
+      case 0x79: { this.PC=this.fetch16(); cycles=6; } break;
+      case 0x7A: { // PTC (prepare table call)
+        const k=this.fetch8();
+        const hi=this.fetch8(), lo=this.fetch8();
+        const retAddr=((hi<<8)|lo)&0xFFFF;
+        this.pushAddr(retAddr);
+        this.writeIram(this.R, k);
+        cycles=9;
+      } break;
+      case 0x78: { // CALL nm
+        const addr=this.fetch16();
+        this.pushAddr(this.PC);
+        this.PC=addr; cycles=8;
+      } break;
+      case 0x7C: { const addr=this.fetch16(); if(!this.zero) this.PC=addr; cycles=6; } break;
+      case 0x7D: { const addr=this.fetch16(); if(!this.carry) this.PC=addr; cycles=6; } break;
+      case 0x7E: { const addr=this.fetch16(); if(this.zero) this.PC=addr; cycles=6; } break;
+      case 0x7F: { const addr=this.fetch16(); if(this.carry) this.PC=addr; cycles=6; } break;
+
+      // ── LP n (short form: 0x80 to 0xBF) ─────────────────────────────────
+      // opcodes 0x80..0xBF: LP (P = opcode - 0x80)
+      default:
+        if (opcode >= 0x80 && opcode <= 0xBF) {
+          this.P = opcode - 0x80;
+          this.H = opcode;
+          cycles = 2;
+        }
+        // ── CAL nm (short call: 0xE0+n, with next byte as lo address) ───
+        else if (opcode >= 0xE0 && opcode <= 0xFF) {
+          const lo=this.fetch8();
+          const n=opcode&0x1F;
+          const addr=(n<<8)|lo;
+          this.pushAddr(this.PC);
+          this.PC=addr; cycles=7;
+        }
+        // ── INCB, DECB, INB, OUTB, etc. ─────────────────────────────────
+        else switch(opcode) {
+          case 0xC0: { const r=(this.J+1)&0xFF; this.J=r; this.Q=1; this.setFlags(r); cycles=4; } break; // INCJ
+          case 0xC1: { const r=(this.J-1)&0xFF; this.J=r; this.Q=1; this.setFlags(r); cycles=4; } break; // DECJ
+          case 0xC2: { const r=(this.B+1)&0xFF; this.B=r; this.Q=3; this.setFlags(r); cycles=4; } break; // INCB
+          case 0xC3: { const r=(this.B-1)&0xFF; this.B=r; this.Q=3; this.setFlags(r); cycles=4; } break; // DECB
+          case 0xC4: { const r=this.readIram(this.P)+this.A+this.carry; this.setFlags(r); this.writeIram(this.P,r&0xFF); cycles=3; } break; // ADCM
+          case 0xC5: { const r=this.readIram(this.P)-this.A-this.carry; this.setFlags(r); this.writeIram(this.P,r&0xFF); cycles=3; } break; // SBCM
+          case 0xC6: { this.zero=((this.readIram(this.P)&this.A)===0)?1:0; cycles=3; } break; // TSMA
+          case 0xC7: { const r=this.readIram(this.P)-this.A; this.carry=(r<0)?1:0; this.zero=((r&0xFF)===0)?1:0; cycles=3; } break; // CPMA
+          case 0xC8: { const r=(this.L+1)&0xFF; this.L=r; this.Q=9; this.setFlags(r); cycles=4; } break; // INCL
+          case 0xC9: { const r=(this.L-1)&0xFF; this.L=r; this.Q=9; this.setFlags(r); cycles=4; } break; // DECL
+          case 0xCA: { const r=(this.N+1)&0xFF; this.N=r; this.Q=11; this.setFlags(r); cycles=4; } break; // INCN
+          case 0xCB: { const r=(this.N-1)&0xFF; this.N=r; this.Q=11; this.setFlags(r); cycles=4; } break; // DECN
+          case 0xCC: cycles=2; break; // NOPW alt
+          case 0xCE: cycles=3; break; // NOPT
+          case 0xCC: cycles=2; break; // NOPW alt
+          case 0xD0: this.carry=1; this.zero=1; cycles=2; break; // SC
+          case 0xD1: this.carry=0; this.zero=1; cycles=2; break; // RC
+          case 0xD2: { // SR: shift right with carry
+            const c=this.A&1;
+            this.A=((this.A>>1)|(this.carry<<7))&0xFF;
+            this.carry=c; cycles=2;
+          } break;
+          case 0xD4: { // ANID
+            const n=this.fetch8(); const r=this.readMem(this.DP)&n;
+            this.writeMem(this.DP,r);
+            this.writeIram((this.R-1)&0x7F, r);
+            this.zero=(r===0)?1:0; cycles=6;
+          } break;
+          case 0xD5: { // ORID
+            const n=this.fetch8(); const r=this.readMem(this.DP)|n;
+            this.writeMem(this.DP,r);
+            this.writeIram((this.R-2)&0x7F, r);
+            this.zero=(r===0)?1:0; cycles=6;
+          } break;
+          case 0xD6: { // TSID
+            const n=this.fetch8();
+            const r=this.readMem(this.DP)&n;
+            this.writeIram((this.R-1)&0x7F, this.readMem(this.DP));
+            this.zero=(r===0)?1:0; cycles=6;
+          } break;
+          case 0xD7: { // CPID
+            const n=this.fetch8(); const r=this.readMem(this.DP)-n;
+            this.carry=(r<0)?1:0; this.zero=((r&0xFF)===0)?1:0; cycles=6;
+          } break;
+          case 0xD8: { this.writeIram(this.R,0); cycles=2; } break; // LEAVE
+          case 0xDA: { const t=this.A; this.A=this.B; this.B=t; cycles=3; } break; // EXAB
+          case 0xDB: { const t=this.A; this.A=this.readIram(this.P); this.writeIram(this.P,t); cycles=3; } break; // EXAM
+          case 0xDD: { // OUTB
+            this.portIB=this.readIram(0x5D);
+            if(this.onOutB) this.onOutB(this.portIB);
+            this.Q=0x5D; cycles=2;
+          } break;
+          case 0xDF: { // OUTC
+            this.portC=this.readIram(0x5F);
+            if(this.onOutC) this.onOutC(this.portC);
+            cycles=2;
+          } break;
+          case 0xCC: { this.A=this.portIB; this.zero=(this.A===0)?1:0; cycles=2; } break; // INB
+          // DTC - do table call
+          case 0x69: { // DTC
+            // compare A against table entries
+            let k=this.readIram(this.R); // k from PTC
+            let matched=false;
+            for(let i=0;i<k;i++){
+              const cond=this.readMem(this.PC); this.PC=(this.PC+1)&0xFFFF;
+              const hi=this.readMem(this.PC); this.PC=(this.PC+1)&0xFFFF;
+              const lo=this.readMem(this.PC); this.PC=(this.PC+1)&0xFFFF;
+              if(!matched && this.A===cond){
+                const addr=(hi<<8)|lo;
+                this.pushAddr(this.PC);
+                this.PC=addr;
+                matched=true;
+              }
+            }
+            // default entry
+            const dhi=this.readMem(this.PC); this.PC=(this.PC+1)&0xFFFF;
+            const dlo=this.readMem(this.PC); this.PC=(this.PC+1)&0xFFFF;
+            if(!matched){
+              const addr=(dhi<<8)|dlo;
+              this.pushAddr(this.PC);
+              this.PC=addr;
+            }
+            this.H=this.A;
+            this.zero=(k===0)?1:0;
+            cycles=5+7*k;
+          } break;
+          case 0x6B: { // TEST n (test against byte at DP)
+            const n=this.fetch8();
+            const testByte=this.readMem(this.DP);
+            this.zero=((testByte&n)===0)?1:0; cycles=4;
+          } break;
+          case 0x6F: cycles=2; break; // CDN (simplified - scan input)
+          case 0xCC: break; // alt NOPW
+          default:
+            // Unknown opcode - NOP
+            cycles=2;
+            break;
+        }
+        break;
+    }
+
+    this.cycles += cycles;
+    return cycles;
+  }
+
+  // Run for approximately n cycles
+  runCycles(n) {
+    let ran = 0;
+    while (ran < n && !this.halted) {
+      ran += this.step();
+    }
+    return ran;
+  }
+
+  reset() {
+    this.iram.fill(0);
+    this.PC   = 0x0000;
+    this.DP   = 0x0000;
+    this._P   = 0x00;
+    this._Q   = 0x00;
+    this._R   = 0x5B;
+    this.carry = 0;
+    this.zero  = 0;
+    this.H     = 0;
+    this.cycles= 0;
+    this.halted= false;
+    this.portIA= 0;
+    this.portIB= 0;
+    this.portF0= 0;
+    this.portC = 0;
+  }
+}
+
+// Export for module use
+
+// ===== DISPLAY + KEYBOARD =====
+/**
+ * Sharp PC-1403 Display Controller
+ * 24-character LCD display with 5×7 dot matrix characters
+ */
+class PC1403Display {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.text = '';
+    this.indicators = {
+      DEG: false, RAD: false, GRA: false,
+      RUN: false, PRO: false, SHIFT: false,
+      HYP: false, M: false, E: false, DE: false
+    };
+    this.cursorPos = -1;
+    this.blinkState = true;
+    
+    // LCD green color scheme
+    this.LCD_BG = '#8BAC0F';
+    this.LCD_DARK = '#0F380F';
+    this.LCD_MED = '#306230';
+    
+    this._setupCanvas();
+    this._startBlink();
+  }
+
+  _setupCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    // Use a safe default if the element has no layout yet
+    const w = this.canvas.clientWidth || this.canvas.width || 400;
+    const h = 56;
+    this.canvas.width  = w * dpr;
+    this.canvas.height = h * dpr;
+    this.canvas.style.width  = w + 'px';
+    this.canvas.style.height = h + 'px';
+    this.ctx.setTransform(1,0,0,1,0,0);
+    this.ctx.scale(dpr, dpr);
+    this.W = w;
+    this.H = h;
+    this.render();
+  }
+
+  _startBlink() {
+    setInterval(() => {
+      this.blinkState = !this.blinkState;
+      this.render();
+    }, 500);
+  }
+
+  showText(text) {
+    this.text = String(text).slice(0, 24);
+    this.render();
+  }
+
+  setIndicator(name, val) {
+    this.indicators[name] = val;
+    this.render();
+  }
+
+  setCursor(pos) {
+    this.cursorPos = pos;
+    this.render();
+  }
+
+  clear() {
+    this.text = '';
+    this.render();
+  }
+
+  render() {
+    const ctx = this.ctx;
+    const W = this.W, H = this.H;
+    
+    // Background
+    ctx.fillStyle = this.LCD_BG;
+    ctx.fillRect(0, 0, W, H);
+    
+    // Subtle scanline effect
+    ctx.fillStyle = 'rgba(0,0,0,0.04)';
+    for (let y = 0; y < H; y += 2) {
+      ctx.fillRect(0, y, W, 1);
+    }
+
+    // Draw indicators at top
+    this._drawIndicators(ctx, W);
+    
+    // Character area
+    const charAreaTop = 18;
+    const charH = H - charAreaTop - 4;
+    const charW = Math.floor((W - 20) / 24);
+    const startX = 10;
+    
+    for (let i = 0; i < 24; i++) {
+      const x = startX + i * charW;
+      const ch = this.text[i] || ' ';
+      const isCursor = (i === this.cursorPos && this.blinkState);
+      this._drawChar(ctx, ch, x, charAreaTop, charW, charH, isCursor);
+    }
+  }
+
+  _drawIndicators(ctx, W) {
+    const indicators = [
+      { name: 'DEG', x: 10 },
+      { name: 'RAD', x: 42 },
+      { name: 'GRA', x: 74 },
+      { name: 'SHIFT', x: 115, label: 'S' },
+      { name: 'HYP', x: 145 },
+      { name: 'M', x: 185 },
+      { name: 'E', x: W - 50 },
+      { name: 'RUN', x: W - 80 },
+      { name: 'PRO', x: W - 115 },
+    ];
+    
+    ctx.font = 'bold 8px "Courier New", monospace';
+    for (const ind of indicators) {
+      const active = this.indicators[ind.name];
+      ctx.fillStyle = active ? this.LCD_DARK : this.LCD_MED;
+      ctx.globalAlpha = active ? 1 : 0.3;
+      ctx.fillText(ind.label || ind.name, ind.x, 11);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  _drawChar(ctx, ch, x, y, w, h, cursor) {
+    // Background for cursor
+    if (cursor) {
+      ctx.fillStyle = this.LCD_DARK;
+      ctx.fillRect(x, y, w - 1, h);
+    }
+    
+    const bitmap = CHAR_BITMAPS[ch] || CHAR_BITMAPS[' '];
+    const pixW = Math.floor(w / 6);
+    const pixH = Math.floor(h / 8);
+    const offX = Math.floor((w - 5*pixW) / 2);
+    const offY = Math.floor((h - 7*pixH) / 2);
+    
+    for (let row = 0; row < 7; row++) {
+      const rowData = bitmap[row] || 0;
+      for (let col = 0; col < 5; col++) {
+        const on = (rowData >> (4 - col)) & 1;
+        if (on) {
+          ctx.fillStyle = cursor ? this.LCD_BG : this.LCD_DARK;
+          ctx.fillRect(x + offX + col*pixW, y + offY + row*pixH, pixW, pixH);
+        } else if (!cursor) {
+          // Draw dim dots for LCD look
+          ctx.fillStyle = 'rgba(15,56,15,0.15)';
+          ctx.fillRect(x + offX + col*pixW + Math.floor(pixW/4), 
+                       y + offY + row*pixH + Math.floor(pixH/4), 
+                       Math.max(1, pixW/2), Math.max(1, pixH/2));
+        }
+      }
+    }
+  }
+}
+
+// 5×7 character bitmaps (rows, each row is 5 bits)
+const CHAR_BITMAPS = {
+  ' ': [0,0,0,0,0,0,0],
+  '0': [0b01110,0b10001,0b10011,0b10101,0b11001,0b10001,0b01110],
+  '1': [0b00100,0b01100,0b00100,0b00100,0b00100,0b00100,0b01110],
+  '2': [0b01110,0b10001,0b00001,0b00010,0b00100,0b01000,0b11111],
+  '3': [0b11111,0b00010,0b00100,0b00010,0b00001,0b10001,0b01110],
+  '4': [0b00010,0b00110,0b01010,0b10010,0b11111,0b00010,0b00010],
+  '5': [0b11111,0b10000,0b11110,0b00001,0b00001,0b10001,0b01110],
+  '6': [0b00110,0b01000,0b10000,0b11110,0b10001,0b10001,0b01110],
+  '7': [0b11111,0b00001,0b00010,0b00100,0b01000,0b01000,0b01000],
+  '8': [0b01110,0b10001,0b10001,0b01110,0b10001,0b10001,0b01110],
+  '9': [0b01110,0b10001,0b10001,0b01111,0b00001,0b00010,0b01100],
+  'A': [0b01110,0b10001,0b10001,0b11111,0b10001,0b10001,0b10001],
+  'B': [0b11110,0b10001,0b10001,0b11110,0b10001,0b10001,0b11110],
+  'C': [0b01110,0b10001,0b10000,0b10000,0b10000,0b10001,0b01110],
+  'D': [0b11110,0b10001,0b10001,0b10001,0b10001,0b10001,0b11110],
+  'E': [0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b11111],
+  'F': [0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b10000],
+  'G': [0b01110,0b10001,0b10000,0b10111,0b10001,0b10001,0b01111],
+  'H': [0b10001,0b10001,0b10001,0b11111,0b10001,0b10001,0b10001],
+  'I': [0b01110,0b00100,0b00100,0b00100,0b00100,0b00100,0b01110],
+  'J': [0b00111,0b00010,0b00010,0b00010,0b00010,0b10010,0b01100],
+  'K': [0b10001,0b10010,0b10100,0b11000,0b10100,0b10010,0b10001],
+  'L': [0b10000,0b10000,0b10000,0b10000,0b10000,0b10000,0b11111],
+  'M': [0b10001,0b11011,0b10101,0b10001,0b10001,0b10001,0b10001],
+  'N': [0b10001,0b11001,0b10101,0b10011,0b10001,0b10001,0b10001],
+  'O': [0b01110,0b10001,0b10001,0b10001,0b10001,0b10001,0b01110],
+  'P': [0b11110,0b10001,0b10001,0b11110,0b10000,0b10000,0b10000],
+  'Q': [0b01110,0b10001,0b10001,0b10001,0b10101,0b10010,0b01101],
+  'R': [0b11110,0b10001,0b10001,0b11110,0b10100,0b10010,0b10001],
+  'S': [0b01110,0b10001,0b10000,0b01110,0b00001,0b10001,0b01110],
+  'T': [0b11111,0b00100,0b00100,0b00100,0b00100,0b00100,0b00100],
+  'U': [0b10001,0b10001,0b10001,0b10001,0b10001,0b10001,0b01110],
+  'V': [0b10001,0b10001,0b10001,0b10001,0b10001,0b01010,0b00100],
+  'W': [0b10001,0b10001,0b10001,0b10101,0b10101,0b11011,0b10001],
+  'X': [0b10001,0b10001,0b01010,0b00100,0b01010,0b10001,0b10001],
+  'Y': [0b10001,0b10001,0b01010,0b00100,0b00100,0b00100,0b00100],
+  'Z': [0b11111,0b00001,0b00010,0b00100,0b01000,0b10000,0b11111],
+  'a': [0b00000,0b01110,0b00001,0b01111,0b10001,0b10011,0b01101],
+  'b': [0b10000,0b10000,0b11110,0b10001,0b10001,0b10001,0b11110],
+  'c': [0b00000,0b01110,0b10001,0b10000,0b10000,0b10001,0b01110],
+  'd': [0b00001,0b00001,0b01111,0b10001,0b10001,0b10001,0b01111],
+  'e': [0b00000,0b01110,0b10001,0b11111,0b10000,0b10000,0b01110],
+  'f': [0b00110,0b01000,0b11110,0b01000,0b01000,0b01000,0b01000],
+  'g': [0b00000,0b01111,0b10001,0b10001,0b01111,0b00001,0b01110],
+  'h': [0b10000,0b10000,0b11110,0b10001,0b10001,0b10001,0b10001],
+  'i': [0b00100,0b00000,0b01100,0b00100,0b00100,0b00100,0b01110],
+  'j': [0b00010,0b00000,0b00110,0b00010,0b00010,0b10010,0b01100],
+  'k': [0b10000,0b10000,0b10010,0b10100,0b11000,0b10100,0b10010],
+  'l': [0b01100,0b00100,0b00100,0b00100,0b00100,0b00100,0b01110],
+  'm': [0b00000,0b11010,0b10101,0b10101,0b10001,0b10001,0b10001],
+  'n': [0b00000,0b11110,0b10001,0b10001,0b10001,0b10001,0b10001],
+  'o': [0b00000,0b01110,0b10001,0b10001,0b10001,0b10001,0b01110],
+  'p': [0b00000,0b11110,0b10001,0b10001,0b11110,0b10000,0b10000],
+  'q': [0b00000,0b01111,0b10001,0b10001,0b01111,0b00001,0b00001],
+  'r': [0b00000,0b01110,0b10001,0b10000,0b10000,0b10000,0b10000],
+  's': [0b00000,0b01111,0b10000,0b01110,0b00001,0b10001,0b01110],
+  't': [0b01000,0b01000,0b11110,0b01000,0b01000,0b01001,0b00110],
+  'u': [0b00000,0b10001,0b10001,0b10001,0b10001,0b10011,0b01101],
+  'v': [0b00000,0b10001,0b10001,0b10001,0b01010,0b01010,0b00100],
+  'w': [0b00000,0b10001,0b10001,0b10101,0b10101,0b01010,0b01010],
+  'x': [0b00000,0b10001,0b01010,0b00100,0b01010,0b10001,0b00000],
+  'y': [0b00000,0b10001,0b10001,0b01111,0b00001,0b10001,0b01110],
+  'z': [0b00000,0b11111,0b00010,0b00100,0b01000,0b10000,0b11111],
+  '+': [0b00000,0b00100,0b00100,0b11111,0b00100,0b00100,0b00000],
+  '-': [0b00000,0b00000,0b00000,0b11111,0b00000,0b00000,0b00000],
+  '*': [0b00000,0b10101,0b01110,0b11111,0b01110,0b10101,0b00000],
+  '/': [0b00001,0b00001,0b00010,0b00100,0b01000,0b10000,0b10000],
+  '=': [0b00000,0b00000,0b11111,0b00000,0b11111,0b00000,0b00000],
+  '<': [0b00010,0b00100,0b01000,0b10000,0b01000,0b00100,0b00010],
+  '>': [0b01000,0b00100,0b00010,0b00001,0b00010,0b00100,0b01000],
+  '.': [0b00000,0b00000,0b00000,0b00000,0b00000,0b01100,0b01100],
+  ',': [0b00000,0b00000,0b00000,0b00000,0b00110,0b00100,0b01000],
+  '!': [0b00100,0b00100,0b00100,0b00100,0b00000,0b00100,0b00100],
+  '?': [0b01110,0b10001,0b00001,0b00110,0b00100,0b00000,0b00100],
+  '(': [0b00010,0b00100,0b01000,0b01000,0b01000,0b00100,0b00010],
+  ')': [0b01000,0b00100,0b00010,0b00010,0b00010,0b00100,0b01000],
+  '[': [0b01110,0b01000,0b01000,0b01000,0b01000,0b01000,0b01110],
+  ']': [0b01110,0b00010,0b00010,0b00010,0b00010,0b00010,0b01110],
+  '_': [0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b11111],
+  '$': [0b00100,0b01111,0b10100,0b01110,0b00101,0b11110,0b00100],
+  '%': [0b11000,0b11001,0b00010,0b00100,0b01000,0b10011,0b00011],
+  '^': [0b00100,0b01010,0b10001,0b00000,0b00000,0b00000,0b00000],
+  ':': [0b00000,0b01100,0b01100,0b00000,0b01100,0b01100,0b00000],
+  ';': [0b00000,0b01100,0b01100,0b00000,0b01100,0b00100,0b01000],
+  '#': [0b01010,0b01010,0b11111,0b01010,0b11111,0b01010,0b01010],
+  '@': [0b01110,0b10001,0b10001,0b10111,0b10110,0b10000,0b01110],
+  '"': [0b01010,0b01010,0b00000,0b00000,0b00000,0b00000,0b00000],
+  "'": [0b00100,0b00100,0b00000,0b00000,0b00000,0b00000,0b00000],
+  '`': [0b01000,0b00100,0b00000,0b00000,0b00000,0b00000,0b00000],
+  '~': [0b00000,0b01101,0b10110,0b00000,0b00000,0b00000,0b00000],
+  '|': [0b00100,0b00100,0b00100,0b00100,0b00100,0b00100,0b00100],
+  '\\': [0b10000,0b10000,0b01000,0b00100,0b00010,0b00001,0b00001],
+  '{': [0b00110,0b00100,0b00100,0b01000,0b00100,0b00100,0b00110],
+  '}': [0b01100,0b00100,0b00100,0b00010,0b00100,0b00100,0b01100],
+  'E': [0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b11111],
+};
+
+// ─── Keyboard Layout ───────────────────────────────────────────────────────
+// PC-1403 keyboard layout
+const PC1403_KEYS = [
+  // Row 0
+  [
+    { id:'OFF',   label:'OFF',   w:1, cls:'key-sys' },
+    { id:'MODE',  label:'MODE',  w:1, cls:'key-sys' },
+    { id:'SHIFT', label:'SHIFT', w:1, cls:'key-shift' },
+    { id:'DEF',   label:'DEF',   w:1, cls:'key-func' },
+    { id:'CTL',   label:'CTL',   w:1, cls:'key-func' },
+  ],
+  // Row 1
+  [
+    { id:'CALC',  label:'CAL',   w:1, cls:'key-sys',  sub:'RUN' },
+    { id:'DEG',   label:'DEG',   w:1, cls:'key-func', sub:'HYP' },
+    { id:'SIN',   label:'SIN',   w:1, cls:'key-func', sub:'ASN' },
+    { id:'COS',   label:'COS',   w:1, cls:'key-func', sub:'ACS' },
+    { id:'TAN',   label:'TAN',   w:1, cls:'key-func', sub:'ATN' },
+  ],
+  // Row 2
+  [
+    { id:'M+',    label:'M+',    w:1, cls:'key-func', sub:'M-' },
+    { id:'LOG',   label:'log',   w:1, cls:'key-func', sub:'10x' },
+    { id:'LN',    label:'ln',    w:1, cls:'key-func', sub:'ex' },
+    { id:'SQR',   label:'√',     w:1, cls:'key-func', sub:'x²' },
+    { id:'POW',   label:'xʸ',    w:1, cls:'key-func', sub:'ʸ√x' },
+  ],
+  // Row 3
+  [
+    { id:'MR',    label:'MR',    w:1, cls:'key-func', sub:'MC' },
+    { id:'PAREN_L', label:'(',   w:1, cls:'key-num' },
+    { id:'PAREN_R', label:')',   w:1, cls:'key-num' },
+    { id:'REC',   label:'→r,θ', w:1, cls:'key-func', sub:'→x,y' },
+    { id:'EXP',   label:'EXP',   w:1, cls:'key-num', sub:'π' },
+  ],
+  // Row 4
+  [
+    { id:'BS',    label:'DEL',   w:1, cls:'key-edit' },
+    { id:'7',     label:'7',     w:1, cls:'key-num',  sub:'&' },
+    { id:'8',     label:'8',     w:1, cls:'key-num',  sub:'\'' },
+    { id:'9',     label:'9',     w:1, cls:'key-num',  sub:'(' },
+    { id:'DIV',   label:'÷',     w:1, cls:'key-op' },
+  ],
+  // Row 5
+  [
+    { id:'CLS',   label:'CLS',   w:1, cls:'key-edit' },
+    { id:'4',     label:'4',     w:1, cls:'key-num',  sub:'$' },
+    { id:'5',     label:'5',     w:1, cls:'key-num',  sub:'%' },
+    { id:'6',     label:'6',     w:1, cls:'key-num',  sub:')' },
+    { id:'MUL',   label:'×',     w:1, cls:'key-op' },
+  ],
+  // Row 6
+  [
+    { id:'INS',   label:'INS',   w:1, cls:'key-edit' },
+    { id:'1',     label:'1',     w:1, cls:'key-num',  sub:'!' },
+    { id:'2',     label:'2',     w:1, cls:'key-num',  sub:'"' },
+    { id:'3',     label:'3',     w:1, cls:'key-num',  sub:'#' },
+    { id:'SUB',   label:'-',     w:1, cls:'key-op' },
+  ],
+  // Row 7
+  [
+    { id:'ENTER', label:'ENT',   w:1, cls:'key-enter' },
+    { id:'0',     label:'0',     w:1, cls:'key-num',  sub:'@' },
+    { id:'DOT',   label:'.',     w:1, cls:'key-num',  sub:',' },
+    { id:'NEG',   label:'+/-',   w:1, cls:'key-num',  sub:'=' },
+    { id:'ADD',   label:'+',     w:1, cls:'key-op' },
+  ],
+];
+
+class PC1403Keyboard {
+  constructor(container, onKey) {
+    this.container = container;
+    this.onKey = onKey;
+    this.shiftActive = false;
+    this._build();
+  }
+
+  _build() {
+    this.container.innerHTML = '';
+    this.container.className = 'keyboard';
+    
+    for (const row of PC1403_KEYS) {
+      const rowEl = document.createElement('div');
+      rowEl.className = 'key-row';
+      
+      for (const key of row) {
+        const btn = document.createElement('button');
+        btn.className = `key ${key.cls || ''}`;
+        btn.dataset.keyId = key.id;
+        
+        const mainLabel = document.createElement('span');
+        mainLabel.className = 'key-main';
+        mainLabel.textContent = key.label;
+        btn.appendChild(mainLabel);
+        
+        if (key.sub) {
+          const subLabel = document.createElement('span');
+          subLabel.className = 'key-sub';
+          subLabel.textContent = key.sub;
+          btn.appendChild(subLabel);
+        }
+        
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          this._handleKey(key.id, key);
+        });
+        
+        // Touch support
+        btn.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          btn.classList.add('pressed');
+        }, { passive: false });
+        btn.addEventListener('touchend', (e) => {
+          e.preventDefault();
+          btn.classList.remove('pressed');
+          this._handleKey(key.id, key);
+        }, { passive: false });
+        
+        rowEl.appendChild(btn);
+      }
+      this.container.appendChild(rowEl);
+    }
+  }
+
+  _handleKey(id, key) {
+    if (id === 'SHIFT') {
+      this.shiftActive = !this.shiftActive;
+      this.container.classList.toggle('shifted', this.shiftActive);
+      return;
+    }
+    
+    const isShifted = this.shiftActive;
+    if (isShifted) {
+      this.shiftActive = false;
+      this.container.classList.remove('shifted');
+    }
+    
+    if (this.onKey) this.onKey(id, isShifted, key);
+  }
+
+  setShift(val) {
+    this.shiftActive = val;
+    this.container.classList.toggle('shifted', val);
+  }
+}
+
+// ===== BASIC INTERPRETER =====
+/**
+ * Sharp PC-1403 System Emulator
+ * 
+ * The PC-1403 ROM is not publicly available. This module implements
+ * a high-level emulation of the PC-1403's BASIC interpreter and 
+ * system software, providing full BASIC functionality without requiring
+ * the actual ROM binary.
+ * 
+ * Supported BASIC commands and functions matching the real PC-1403.
+ */
+
+class PC1403Basic {
+  constructor(display, keyboard) {
+    this.display = display;   // Display controller
+    this.keyboard = keyboard; // Keyboard controller
+    
+    // System RAM: 8KB (6863 bytes usable)
+    this.ram = new Uint8Array(8192);
+    
+    // BASIC program storage
+    this.program = [];        // Array of {lineNum, tokens}
+    this.variables = {};      // Variable storage
+    this.arrays = {};         // Array storage
+    this.stringVars = {};     // String variables (name$)
+    
+    // Execution state
+    this.running = false;
+    this.currentLine = 0;
+    this.lineIndex = 0;
+    this.stack = [];          // FOR..NEXT, GOSUB stack
+    this.dataList = [];       // DATA statement values
+    this.dataPtr = 0;
+    
+    // Calculator mode
+    this.calcMode = false;
+    
+    // Current mode: 'PRO' (program), 'RUN', 'CAL'
+    this.mode = 'RUN';
+    
+    // Display buffer
+    this.displayText = '';
+    this.cursorPos = 0;
+    this.cursorVisible = true;
+    this.cursorBlink = null;
+    
+    // Input buffer
+    this.inputBuffer = '';
+    this.inputMode = false;
+    this.inputCallback = null;
+    
+    // Output callback
+    this.onPrint = null;
+    this.onBeep = null;
+    this.onModeChange = null;
+    
+    // Math precision (10 significant digits like real PC-1403)
+    this.PRECISION = 10;
+
+    // Angle mode: 'DEG', 'RAD', 'GRA'
+    this.angleMode = 'DEG';
+    
+    // Error handling
+    this.lastError = '';
+    
+    this._initSystem();
+  }
+
+  _initSystem() {
+    this.variables = {};
+    this.arrays = {};
+    this.stringVars = {};
+    this.program = [];
+    this.stack = [];
+    this.dataList = [];
+    this.dataPtr = 0;
+    this.running = false;
+  }
+
+  // ─── Mode management ──────────────────────────────────────────────────────
+  setMode(mode) {
+    this.mode = mode;
+    if (this.onModeChange) this.onModeChange(mode);
+    if (mode === 'PRO') {
+      this.display.showText('PRO');
+    } else if (mode === 'CAL') {
+      this.calcMode = true;
+      this.display.showText('');
+    } else {
+      this.calcMode = false;
+    }
+  }
+
+  // ─── BASIC line parsing ───────────────────────────────────────────────────
+  tokenizeLine(line) {
+    line = line.trim();
+    if (!line) return null;
+    
+    // A line number must be digits followed by a space or end-of-string.
+    // This prevents '1+1' being parsed as line 1 with source '+1'.
+    const lineNumMatch = line.match(/^(\d+)(\s+(.*))?$/);
+    if (lineNumMatch) {
+      const src = (lineNumMatch[3] || '').trim();
+      return {
+        lineNum: parseInt(lineNumMatch[1]),
+        src
+      };
+    }
+    // Direct execution
+    return { lineNum: -1, src: line };
+  }
+
+  // Add/replace line in program
+  addLine(lineNum, src) {
+    // Remove existing line
+    this.program = this.program.filter(l => l.lineNum !== lineNum);
+    if (src.trim()) {
+      this.program.push({ lineNum, src });
+    }
+    // Sort by line number
+    this.program.sort((a,b) => a.lineNum - b.lineNum);
+  }
+
+  // ─── Expression evaluator ─────────────────────────────────────────────────
+  evalExpr(expr) {
+    expr = expr.trim();
+    if (!expr) return 0;
+    
+    // Parse comparison operators
+    for (const op of ['>=','<=','<>','!=','>','<','=']) {
+      const idx = this._findOperator(expr, op);
+      if (idx !== -1) {
+        const left  = this.evalExpr(expr.slice(0, idx));
+        const right = this.evalExpr(expr.slice(idx + op.length));
+        switch(op) {
+          case '=':  return (Math.abs(left - right) < 1e-10) ? 1 : 0;
+          case '<>': case '!=': return (Math.abs(left - right) >= 1e-10) ? 1 : 0;
+          case '>':  return left > right ? 1 : 0;
+          case '<':  return left < right ? 1 : 0;
+          case '>=': return left >= right ? 1 : 0;
+          case '<=': return left <= right ? 1 : 0;
+        }
+      }
+    }
+
+    // OR / AND (BASIC logical)
+    for (const op of [' OR ', ' AND ']) {
+      const idx = expr.toUpperCase().indexOf(op);
+      if (idx !== -1) {
+        const left  = this.evalExpr(expr.slice(0, idx));
+        const right = this.evalExpr(expr.slice(idx + op.length));
+        if (op.trim() === 'OR')  return (left !== 0 || right !== 0) ? 1 : 0;
+        if (op.trim() === 'AND') return (left !== 0 && right !== 0) ? 1 : 0;
+      }
+    }
+
+    // NOT
+    if (expr.toUpperCase().startsWith('NOT ')) {
+      return this.evalExpr(expr.slice(4)) === 0 ? 1 : 0;
+    }
+    
+    // Addition/subtraction (lowest precedence of arithmetic)
+    const addIdx = this._findOperator(expr, '+', '-');
+    if (addIdx !== -1) {
+      const op = expr[addIdx];
+      const left  = this.evalExpr(expr.slice(0, addIdx));
+      const right = this.evalExpr(expr.slice(addIdx + 1));
+      return op === '+' ? left + right : left - right;
+    }
+    
+    // Multiplication/division
+    const mulIdx = this._findOperator(expr, '*', '/');
+    if (mulIdx !== -1) {
+      const op = expr[mulIdx];
+      const left  = this.evalExpr(expr.slice(0, mulIdx));
+      const right = this.evalExpr(expr.slice(mulIdx + 1));
+      if (op === '*') return left * right;
+      if (right === 0) throw new Error('Division by zero');
+      return left / right;
+    }
+
+    // Power
+    const powIdx = this._findOperator(expr, '^');
+    if (powIdx !== -1) {
+      const left  = this.evalExpr(expr.slice(0, powIdx));
+      const right = this.evalExpr(expr.slice(powIdx + 1));
+      return Math.pow(left, right);
+    }
+    
+    // Unary minus
+    if (expr.startsWith('-')) {
+      return -this.evalExpr(expr.slice(1));
+    }
+    
+    // Parentheses
+    if (expr.startsWith('(') && expr.endsWith(')')) {
+      return this.evalExpr(expr.slice(1, -1));
+    }
+
+    // Functions
+    const funcMatch = expr.match(/^([A-Z][A-Z0-9]*)\s*\((.+)\)$/i);
+    if (funcMatch) {
+      return this._evalFunc(funcMatch[1].toUpperCase(), funcMatch[2]);
+    }
+    
+    // Array access: A(n) or A(n,m)
+    const arrMatch = expr.match(/^([A-Z])\s*\((.+)\)$/i);
+    if (arrMatch) {
+      return this._getArrayVal(arrMatch[1].toUpperCase(), arrMatch[2]);
+    }
+    
+    // Number literal
+    const num = parseFloat(expr);
+    if (!isNaN(num)) return num;
+    
+    // Variable
+    const varName = expr.toUpperCase().trim();
+    if (/^[A-Z]$/.test(varName)) {
+      return this.variables[varName] || 0;
+    }
+    
+    throw new Error(`Syntax error: ${expr}`);
+  }
+
+  _toAngle(v) {
+    if (this.angleMode === 'DEG') return v * Math.PI / 180;
+    if (this.angleMode === 'GRA') return v * Math.PI / 200;
+    return v;
+  }
+  _fromAngle(v) {
+    if (this.angleMode === 'DEG') return v * 180 / Math.PI;
+    if (this.angleMode === 'GRA') return v * 200 / Math.PI;
+    return v;
+  }
+
+  _evalFunc(name, argsStr) {
+    const args = this._splitArgs(argsStr).map(a => this.evalExpr(a));
+    const v = args[0];
+    switch(name) {
+      case 'SIN':   return Math.sin(this._toAngle(v));
+      case 'COS':   return Math.cos(this._toAngle(v));
+      case 'TAN':   return Math.tan(this._toAngle(v));
+      case 'ASN':   return this._fromAngle(Math.asin(v));
+      case 'ACS':   return this._fromAngle(Math.acos(v));
+      case 'ATN':   return this._fromAngle(Math.atan(v));
+      case 'ATN2':  return this._fromAngle(Math.atan2(v, args[1]));
+      case 'LOG':   if(v<=0) throw new Error('Math error'); return Math.log10(v);
+      case 'LN':    if(v<=0) throw new Error('Math error'); return Math.log(v);
+      case 'EXP':   return Math.exp(v);
+      case 'SQR':   if(v<0)  throw new Error('Math error'); return Math.sqrt(v);
+      case 'ABS':   return Math.abs(v);
+      case 'INT':   return Math.floor(v);
+      case 'SGN':   return v>0?1:v<0?-1:0;
+      case 'RND':   return Math.random();
+      case 'FRAC':  return v - Math.floor(v);
+      case 'PI':    return Math.PI;
+      case 'DEG':   return v * 180 / Math.PI;
+      case 'DMS':   { // degrees to D.MMSS format
+        const d=Math.floor(Math.abs(v));
+        const mf=(Math.abs(v)-d)*60;
+        const m=Math.floor(mf);
+        const s=(mf-m)*60;
+        return (v<0?-1:1)*(d+m/100+s/10000);
+      }
+      case 'CUR':   return v; // cursor position (simplified)
+      default:
+        throw new Error(`Unknown function: ${name}`);
+    }
+  }
+
+  _splitArgs(str) {
+    const args = [];
+    let depth = 0, start = 0;
+    for (let i = 0; i < str.length; i++) {
+      if (str[i] === '(') depth++;
+      else if (str[i] === ')') depth--;
+      else if (str[i] === ',' && depth === 0) {
+        args.push(str.slice(start, i).trim());
+        start = i + 1;
+      }
+    }
+    args.push(str.slice(start).trim());
+    return args;
+  }
+
+  _getArrayVal(name, idxStr) {
+    const indices = this._splitArgs(idxStr).map(s => Math.floor(this.evalExpr(s)));
+    const key = indices.join(',');
+    return (this.arrays[name] || {})[key] || 0;
+  }
+
+  _setArrayVal(name, idxStr, val) {
+    const indices = this._splitArgs(idxStr).map(s => Math.floor(this.evalExpr(s)));
+    const key = indices.join(',');
+    if (!this.arrays[name]) this.arrays[name] = {};
+    this.arrays[name][key] = val;
+  }
+
+  // Find operator at depth 0, right-to-left (for left-associativity)
+  _findOperator(expr, ...ops) {
+    let depth = 0;
+    // Scan right to left to handle left-associativity
+    for (let i = expr.length - 1; i >= 0; i--) {
+      const c = expr[i];
+      if (c === ')') depth++;
+      else if (c === '(') depth--;
+      if (depth !== 0) continue;
+      for (const op of ops) {
+        if (expr.slice(i, i + op.length) === op) {
+          // Avoid treating leading unary minus as binary
+          if ((op === '-' || op === '+') && i === 0) continue;
+          // Avoid ** (power with ^)
+          return i;
+        }
+      }
+    }
+    return -1;
+  }
+
+  // ─── String evaluator ─────────────────────────────────────────────────────
+  evalString(expr) {
+    expr = expr.trim();
+    // Concatenation
+    const catIdx = this._findOperator(expr, '+');
+    if (catIdx !== -1) {
+      return this.evalString(expr.slice(0, catIdx)) + this.evalString(expr.slice(catIdx + 1));
+    }
+    // String literal
+    if (expr.startsWith('"') && expr.endsWith('"')) return expr.slice(1, -1);
+    // String variable
+    if (/^[A-Z]\$$/i.test(expr)) return this.stringVars[expr.toUpperCase()] || '';
+    // String functions
+    const m = expr.match(/^(STR\$|CHR\$|LEFT\$|RIGHT\$|MID\$|INSTR|LEN|VAL|ASC)\((.+)\)$/i);
+    if (m) return this._evalStrFunc(m[1].toUpperCase(), m[2]);
+    return '';
+  }
+
+  _evalStrFunc(name, argsStr) {
+    const rawArgs = this._splitArgs(argsStr);
+    switch(name) {
+      case 'STR$': return String(this._formatNum(this.evalExpr(rawArgs[0])));
+      case 'CHR$': return String.fromCharCode(Math.floor(this.evalExpr(rawArgs[0])));
+      case 'LEFT$': return this.evalString(rawArgs[0]).slice(0, Math.floor(this.evalExpr(rawArgs[1])));
+      case 'RIGHT$': { const s=this.evalString(rawArgs[0]); return s.slice(s.length-Math.floor(this.evalExpr(rawArgs[1]))); }
+      case 'MID$': { const s=this.evalString(rawArgs[0]); const p=Math.floor(this.evalExpr(rawArgs[1]))-1; const l=rawArgs[2]?Math.floor(this.evalExpr(rawArgs[2])):undefined; return s.substr(p,l); }
+      case 'LEN': return this.evalString(rawArgs[0]).length;
+      case 'VAL': return parseFloat(this.evalString(rawArgs[0]))||0;
+      case 'ASC': { const s=this.evalString(rawArgs[0]); return s.length?s.charCodeAt(0):0; }
+      case 'INSTR': { const s=this.evalString(rawArgs[0]); const sub=this.evalString(rawArgs[1]); return s.indexOf(sub)+1; }
+      default: return '';
+    }
+  }
+
+  // ─── Number formatting (PC-1403 style: 10 significant digits) ────────────
+  _formatNum(n) {
+    if (!isFinite(n)) return n > 0 ? '1E+99' : '-1E+99';
+    if (n === 0) return '0';
+    
+    const abs = Math.abs(n);
+    const sign = n < 0 ? '-' : '';
+    
+    // Use scientific notation for very large or very small numbers
+    if (abs >= 1e10 || (abs > 0 && abs < 1e-9)) {
+      let s = n.toExponential(9);
+      // Clean up: remove trailing zeros
+      s = s.replace(/\.?0+e/, 'e').replace('e+', 'E+').replace('e-', 'E-');
+      return s;
+    }
+    
+    // Fixed notation
+    let s = n.toPrecision(10);
+    // Remove trailing zeros after decimal
+    if (s.includes('.')) {
+      s = s.replace(/0+$/, '').replace(/\.$/, '');
+    }
+    return s;
+  }
+
+  // ─── Statement executor ───────────────────────────────────────────────────
+  async executeLine(src) {
+    src = src.trim();
+    if (!src) return;
+    
+    // Handle multiple statements separated by :
+    const stmts = this._splitStatements(src);
+    for (const stmt of stmts) {
+      await this._execStatement(stmt.trim());
+      if (!this.running && stmts.length > 1) break;
+    }
+  }
+
+  _splitStatements(src) {
+    const stmts = [];
+    let depth = 0, start = 0, inStr = false;
+    for (let i = 0; i < src.length; i++) {
+      if (src[i] === '"') inStr = !inStr;
+      if (inStr) continue;
+      if (src[i] === '(') depth++;
+      else if (src[i] === ')') depth--;
+      else if (src[i] === ':' && depth === 0) {
+        stmts.push(src.slice(start, i));
+        start = i + 1;
+      }
+    }
+    stmts.push(src.slice(start));
+    return stmts;
+  }
+
+  async _execStatement(stmt) {
+    if (!stmt) return;
+    
+    const upper = stmt.toUpperCase();
+    
+    // PRINT / PRINT USING
+    if (upper.startsWith('PRINT') || upper.startsWith('?')) {
+      const rest = upper.startsWith('PRINT') ? stmt.slice(5).trim() : stmt.slice(1).trim();
+      await this._execPrint(rest);
+      return;
+    }
+    
+    // LET or assignment
+    if (upper.startsWith('LET ')) {
+      await this._execLet(stmt.slice(4).trim()); return;
+    }
+    
+    // Assignment without LET: VAR = EXPR or VAR(idx) = EXPR
+    if (/^[A-Za-z](\(|[A-Za-z0-9]*\$?)?\s*=/.test(stmt)) {
+      await this._execLet(stmt); return;
+    }
+    
+    // Control flow
+    if (upper.startsWith('GOTO '))   { this._execGoto(stmt.slice(5).trim()); return; }
+    if (upper.startsWith('GOSUB '))  { this._execGosub(stmt.slice(6).trim()); return; }
+    if (upper === 'RETURN')          { this._execReturn(); return; }
+    if (upper.startsWith('IF '))     { await this._execIf(stmt.slice(3)); return; }
+    if (upper.startsWith('FOR '))    { this._execFor(stmt.slice(4).trim()); return; }
+    if (upper.startsWith('NEXT '))   { this._execNext(stmt.slice(5).trim()); return; }
+    if (upper === 'END' || upper === 'STOP') { this.running = false; return; }
+    
+    // I/O
+    if (upper.startsWith('INPUT'))   { await this._execInput(stmt.slice(5).trim()); return; }
+    if (upper.startsWith('READ '))   { this._execRead(stmt.slice(5).trim()); return; }
+    if (upper.startsWith('DATA '))   { /* parsed at load time */ return; }
+    if (upper === 'RESTORE')         { this.dataPtr = 0; return; }
+    
+    // Program control
+    if (upper.startsWith('DIM '))    { this._execDim(stmt.slice(4).trim()); return; }
+    if (upper === 'NEW')             { this._initSystem(); this.display.showText(''); return; }
+    if (upper === 'RUN')             { await this.run(); return; }
+    if (upper.startsWith('LIST'))    { this._execList(stmt.slice(4).trim()); return; }
+    if (upper.startsWith('DELETE ')) { this._execDelete(stmt.slice(7).trim()); return; }
+    
+    // System
+    if (upper === 'CLS' || upper === 'CLEAR') { this.display.clear(); return; }
+    if (upper.startsWith('BEEP'))    { if(this.onBeep) this.onBeep(); return; }
+    if (upper === 'DEG')             { this.angleMode = 'DEG'; return; }
+    if (upper === 'RAD')             { this.angleMode = 'RAD'; return; }
+    if (upper === 'GRA')             { this.angleMode = 'GRA'; return; }
+    if (upper.startsWith('WAIT '))   { await this._sleep(this.evalExpr(stmt.slice(5))*100); return; }
+    if (upper === 'PAUSE')           { await this._sleep(500); return; }
+    
+    // REM / '
+    if (upper.startsWith('REM') || stmt.startsWith("'")) return;
+    
+    // ON .. GOTO/GOSUB
+    if (upper.startsWith('ON '))     { await this._execOn(stmt.slice(3)); return; }
+
+    throw new Error(`Unknown statement: ${stmt}`);
+  }
+
+  async _execPrint(rest) {
+    if (!rest) {
+      this._output('');
+      return;
+    }
+    
+    let output = '';
+    let newline = true;
+    
+    // Split by ; and ,
+    const parts = this._splitPrintParts(rest);
+    
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i].trim();
+      if (part === '') { newline = false; continue; }
+      if (part === ';') { newline = false; continue; }
+      if (part === ',') { output += '\t'; newline = false; continue; }
+      
+      try {
+        if (part.startsWith('"') || /^[A-Z]\$/i.test(part) || 
+            part.includes('STR$') || part.includes('CHR$')) {
+          output += this.evalString(part);
+        } else {
+          output += this._formatNum(this.evalExpr(part));
+        }
+      } catch(e) {
+        output += part;
+      }
+      
+      // Check separator after this value
+      if (i + 1 < parts.length) {
+        const sep = parts[i + 1];
+        if (sep === ';') { newline = false; i++; }
+        else if (sep === ',') { output += '\t'; newline = false; i++; }
+        else newline = true;
+      }
+    }
+    
+    this._output(output, newline);
+  }
+
+  _splitPrintParts(rest) {
+    const parts = [];
+    let i = 0;
+    while (i < rest.length) {
+      if (rest[i] === ';' || rest[i] === ',') {
+        parts.push(rest[i]);
+        i++;
+      } else if (rest[i] === '"') {
+        let j = i + 1;
+        while (j < rest.length && rest[j] !== '"') j++;
+        parts.push(rest.slice(i, j+1));
+        i = j + 1;
+      } else {
+        // find next ; or ,
+        let j = i;
+        let depth = 0;
+        while (j < rest.length) {
+          if (rest[j] === '(') depth++;
+          else if (rest[j] === ')') depth--;
+          else if ((rest[j] === ';' || rest[j] === ',') && depth === 0) break;
+          j++;
+        }
+        if (j > i) parts.push(rest.slice(i, j).trim());
+        i = j;
+      }
+    }
+    return parts;
+  }
+
+  _output(text, newline = true) {
+    if (this.onPrint) this.onPrint(text, newline);
+    this.display.showText(text);
+  }
+
+  async _execLet(stmt) {
+    // Handle array assignment: A(i) = expr  or  A(i,j) = expr
+    const arrAssign = stmt.match(/^([A-Z])\s*\(([^)]+)\)\s*=\s*(.+)$/i);
+    if (arrAssign) {
+      const val = this.evalExpr(arrAssign[3]);
+      this._setArrayVal(arrAssign[1].toUpperCase(), arrAssign[2], val);
+      return;
+    }
+    // String assignment: A$ = expr
+    const strAssign = stmt.match(/^([A-Z]\$)\s*=\s*(.+)$/i);
+    if (strAssign) {
+      this.stringVars[strAssign[1].toUpperCase()] = this.evalString(strAssign[2]);
+      return;
+    }
+    // Numeric: VAR = expr
+    const assign = stmt.match(/^([A-Z])\s*=\s*(.+)$/i);
+    if (assign) {
+      const val = this.evalExpr(assign[2]);
+      this.variables[assign[1].toUpperCase()] = val;
+      return;
+    }
+    throw new Error(`Assignment syntax: ${stmt}`);
+  }
+
+  _execGoto(lineStr) {
+    const lineNum = Math.floor(this.evalExpr(lineStr));
+    const idx = this.program.findIndex(l => l.lineNum === lineNum);
+    if (idx === -1) throw new Error(`Line ${lineNum} not found`);
+    this.lineIndex = idx;
+    this._jumped = true;
+  }
+
+  _execGosub(lineStr) {
+    const lineNum = Math.floor(this.evalExpr(lineStr));
+    const idx = this.program.findIndex(l => l.lineNum === lineNum);
+    if (idx === -1) throw new Error(`Line ${lineNum} not found`);
+    this.stack.push({ type: 'GOSUB', returnIdx: this.lineIndex + 1 });
+    this.lineIndex = idx;
+    this._jumped = true;
+  }
+
+  _execReturn() {
+    const frame = this.stack.findLast(f => f.type === 'GOSUB');
+    if (!frame) throw new Error('RETURN without GOSUB');
+    while (this.stack[this.stack.length-1] !== frame) this.stack.pop();
+    this.stack.pop();
+    this.lineIndex = frame.returnIdx;
+    this._jumped = true;
+  }
+
+  async _execIf(rest) {
+    // IF condition THEN ... [ELSE ...]
+    const thenIdx = rest.toUpperCase().indexOf(' THEN ');
+    if (thenIdx === -1) {
+      // IF cond GOTO linenum
+      const gotoIdx = rest.toUpperCase().indexOf(' GOTO ');
+      if (gotoIdx !== -1) {
+        const cond = this.evalExpr(rest.slice(0, gotoIdx));
+        if (cond !== 0) {
+          this._execGoto(rest.slice(gotoIdx + 6).trim());
+        }
+        return;
+      }
+      throw new Error('IF without THEN');
+    }
+    
+    const condStr = rest.slice(0, thenIdx);
+    const afterThen = rest.slice(thenIdx + 6);
+    
+    const elseIdx = afterThen.toUpperCase().indexOf(' ELSE ');
+    const thenPart = elseIdx !== -1 ? afterThen.slice(0, elseIdx) : afterThen;
+    const elsePart = elseIdx !== -1 ? afterThen.slice(elseIdx + 6) : '';
+    
+    const cond = this.evalExpr(condStr);
+    
+    if (cond !== 0) {
+      // THEN can be a line number (GOTO) or a statement
+      const thenTrim = thenPart.trim();
+      if (/^\d+$/.test(thenTrim)) {
+        this._execGoto(thenTrim);
+      } else {
+        await this.executeLine(thenPart);
+      }
+    } else if (elsePart) {
+      const elseTrim = elsePart.trim();
+      if (/^\d+$/.test(elseTrim)) {
+        this._execGoto(elseTrim);
+      } else {
+        await this.executeLine(elsePart);
+      }
+    }
+  }
+
+  _execFor(rest) {
+    // FOR var = start TO end [STEP step]
+    const m = rest.match(/^([A-Z])\s*=\s*(.+?)\s+TO\s+(.+?)(?:\s+STEP\s+(.+))?$/i);
+    if (!m) throw new Error(`FOR syntax: ${rest}`);
+    
+    const varName = m[1].toUpperCase();
+    const start   = this.evalExpr(m[2]);
+    const end     = this.evalExpr(m[3]);
+    const step    = m[4] ? this.evalExpr(m[4]) : 1;
+    
+    this.variables[varName] = start;
+    this.stack.push({
+      type: 'FOR',
+      varName,
+      end,
+      step,
+      loopLine: this.lineIndex + 1  // jump back to line AFTER FOR, not FOR itself
+    });
+  }
+
+  _execNext(varName) {
+    varName = varName.toUpperCase().trim() || null;
+    
+    // Find matching FOR frame
+    let frameIdx = this.stack.length - 1;
+    while (frameIdx >= 0 && this.stack[frameIdx].type !== 'FOR') frameIdx--;
+    if (frameIdx < 0) throw new Error('NEXT without FOR');
+    
+    const frame = this.stack[frameIdx];
+    if (varName && frame.varName !== varName) throw new Error(`NEXT ${varName} doesn't match FOR ${frame.varName}`);
+    
+    this.variables[frame.varName] += frame.step;
+    
+    const done = frame.step > 0
+      ? this.variables[frame.varName] > frame.end
+      : this.variables[frame.varName] < frame.end;
+    
+    if (!done) {
+      this.lineIndex = frame.loopLine;
+      this._jumped = true;
+    } else {
+      this.stack.splice(frameIdx, 1);
+    }
+  }
+
+  async _execInput(rest) {
+    // INPUT [prompt;] var [, var2 ...]
+    let prompt = '';
+    let vars = rest;
+    
+    const promptMatch = rest.match(/^"([^"]*)"[;,]\s*(.+)$/);
+    if (promptMatch) {
+      prompt = promptMatch[1];
+      vars = promptMatch[2];
+    }
+    
+    const varList = vars.split(',').map(v => v.trim());
+    
+    for (const varName of varList) {
+      const val = await this._getInput(prompt || `${varName}?`);
+      if (/\$/.test(varName)) {
+        this.stringVars[varName.toUpperCase()] = val;
+      } else {
+        this.variables[varName.toUpperCase()] = parseFloat(val) || 0;
+      }
+      prompt = '';
+    }
+  }
+
+  _getInput(prompt) {
+    return new Promise(resolve => {
+      if (this.onPrint) this.onPrint(prompt + ' ', false);
+      this.display.showText(prompt + '_');
+      this.inputMode = true;
+      this.inputBuffer = '';
+      this.inputCallback = (val) => {
+        this.inputMode = false;
+        resolve(val);
+      };
+    });
+  }
+
+  handleKeyInput(char) {
+    if (!this.inputMode) return false;
+    if (char === 'Enter' || char === '\n') {
+      const val = this.inputBuffer;
+      this.inputBuffer = '';
+      if (this.onPrint) this.onPrint(val, true);
+      if (this.inputCallback) this.inputCallback(val);
+      return true;
+    }
+    if (char === 'Backspace' || char === 'DEL') {
+      this.inputBuffer = this.inputBuffer.slice(0, -1);
+    } else if (char.length === 1) {
+      this.inputBuffer += char;
+    }
+    this.display.showText(this.inputBuffer + '_');
+    return true;
+  }
+
+  _execRead(rest) {
+    const vars = rest.split(',').map(v => v.trim());
+    for (const v of vars) {
+      if (this.dataPtr >= this.dataList.length) throw new Error('Out of data');
+      const raw = this.dataList[this.dataPtr++];
+      if (/\$/.test(v)) {
+        this.stringVars[v.toUpperCase()] = String(raw);
+      } else {
+        this.variables[v.toUpperCase()] = parseFloat(raw) || 0;
+      }
+    }
+  }
+
+  _execDim(rest) {
+    const items = rest.split(',');
+    for (const item of items) {
+      const m = item.trim().match(/^([A-Z])\s*\((\d+)(?:,(\d+))?\)$/i);
+      if (!m) throw new Error(`DIM syntax: ${item}`);
+      const name = m[1].toUpperCase();
+      const size1 = parseInt(m[2]) + 1;
+      const size2 = m[3] ? parseInt(m[3]) + 1 : 0;
+      this.arrays[name] = {};
+      if (size2 > 0) {
+        for (let i = 0; i < size1; i++)
+          for (let j = 0; j < size2; j++)
+            this.arrays[name][`${i},${j}`] = 0;
+      } else {
+        for (let i = 0; i < size1; i++)
+          this.arrays[name][String(i)] = 0;
+      }
+    }
+  }
+
+  _execList(rest) {
+    let lines = this.program;
+    if (rest.trim()) {
+      const range = rest.split('-').map(s => parseInt(s.trim()));
+      if (range.length === 1) {
+        lines = lines.filter(l => l.lineNum === range[0]);
+      } else {
+        lines = lines.filter(l => l.lineNum >= (range[0]||0) && l.lineNum <= (range[1]||99999));
+      }
+    }
+    for (const l of lines) {
+      if (this.onPrint) this.onPrint(`${l.lineNum} ${l.src}`, true);
+    }
+  }
+
+  _execDelete(rest) {
+    const range = rest.split('-').map(s => parseInt(s.trim()));
+    if (range.length === 1) {
+      this.program = this.program.filter(l => l.lineNum !== range[0]);
+    } else {
+      this.program = this.program.filter(l => l.lineNum < (range[0]||0) || l.lineNum > (range[1]||99999));
+    }
+  }
+
+  async _execOn(rest) {
+    const m = rest.match(/^(.+?)\s+(GOTO|GOSUB)\s+(.+)$/i);
+    if (!m) throw new Error('ON syntax');
+    const val = Math.floor(this.evalExpr(m[1]));
+    const cmd = m[2].toUpperCase();
+    const targets = m[3].split(',').map(s => s.trim());
+    if (val >= 1 && val <= targets.length) {
+      if (cmd === 'GOTO') this._execGoto(targets[val-1]);
+      else this._execGosub(targets[val-1]);
+    }
+  }
+
+  _sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // ─── Program execution ────────────────────────────────────────────────────
+  async run(startLine) {
+    // Pre-process DATA statements
+    this.dataList = [];
+    this.dataPtr = 0;
+    for (const line of this.program) {
+      const upper = line.src.trim().toUpperCase();
+      if (upper.startsWith('DATA ')) {
+        const items = line.src.slice(5).split(',');
+        this.dataList.push(...items.map(s => s.trim()));
+      }
+    }
+    
+    this.running = true;
+    this.lineIndex = 0;
+    
+    if (startLine !== undefined) {
+      const idx = this.program.findIndex(l => l.lineNum >= startLine);
+      this.lineIndex = idx >= 0 ? idx : 0;
+    }
+    
+    while (this.running && this.lineIndex < this.program.length) {
+      const line = this.program[this.lineIndex];
+      this._jumped = false;
+
+      // Per-line hook: if onStep returns a Promise, await it (allows pause/step)
+      if (this.onStep) {
+        const r = this.onStep(line.lineNum, this.lineIndex);
+        if (r && typeof r.then === 'function') await r;
+        if (!this.running) break; // onStep may have stopped us
+      }
+
+      try {
+        await this.executeLine(line.src);
+      } catch(e) {
+        this.running = false;
+        const msg = `Error in ${line.lineNum}: ${e.message}`;
+        this._output(msg);
+        if (this.onPrint) this.onPrint(msg, true);
+        return;
+      }
+      
+      if (!this._jumped) this.lineIndex++;
+      
+      // Yield to browser every line so UI stays responsive
+      await this._sleep(0);
+    }
+    
+    this.running = false;
+  }
+
+  stop() {
+    this.running = false;
+    this.inputMode = false;
+    if (this.inputCallback) {
+      this.inputCallback('');
+      this.inputCallback = null;
+    }
+  }
+
+  // ─── Direct command entry ─────────────────────────────────────────────────
+  async execute(input) {
+    input = input.trim();
+    if (!input) return;
+    
+    const parsed = this.tokenizeLine(input);
+    if (!parsed) return;
+    
+    if (parsed.lineNum >= 0) {
+      // Store/remove program line
+      this.addLine(parsed.lineNum, parsed.src);
+      if (this.onPrint) this.onPrint(`${parsed.lineNum} ${parsed.src}`, true);
+    } else {
+      // Execute directly
+      let statementError = null;
+      try {
+        await this.executeLine(parsed.src);
+      } catch(e) {
+        statementError = e;
+      }
+
+      if (!this.running) {
+        // Always try to evaluate as expression (covers CAL mode and unknown statements)
+        try {
+          const val = this.evalExpr(parsed.src);
+          const fmt = this._formatNum(val);
+          // Only print if executeLine didn't already produce output (i.e. it threw)
+          if (statementError) {
+            if (this.onPrint) this.onPrint(fmt, true);
+            this.display.showText(fmt);
+            this.display.setCursor(0);
+          }
+        } catch(e2) {
+          // Not an expression either — report the original statement error if any
+          if (statementError) {
+            const msg = `Error: ${statementError.message}`;
+            if (this.onPrint) this.onPrint(msg, true);
+            this.display.showText('Error');
+          }
+        }
+      }
+    }
+  }
+}
+
+</script>
+<script>
+let display, basic;
+let shiftOn = false;
+let lastAns = 0;
+let powered = false;
+
+const lcdCanvas = document.getElementById('lcd');
+
+// Properly resize LCD canvas after display exists
+function resizeLcd() {
+  if (!display) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.max(lcdCanvas.parentElement.clientWidth, 100);
+  lcdCanvas.style.width  = w + 'px';
+  lcdCanvas.style.height = '56px';
+  lcdCanvas.width  = w * dpr;
+  lcdCanvas.height = 56 * dpr;
+  display.W   = w;
+  display.H   = 56;
+  display.ctx = lcdCanvas.getContext('2d');
+  display.ctx.setTransform(1,0,0,1,0,0);
+  display.ctx.scale(dpr, dpr);
+  display.render();
+}
+
+// Sync LCD to show what is typed in the terminal input
+function lcdSync() {
+  if (!display || !powered) return;
+  const val = document.getElementById('ti').value;
+  const txt = val.slice(-24);
+  display.showText(txt);
+  display.setCursor(txt.length > 0 ? txt.length : 0);
+}
+
+function powerOn() {
+  powered = true;
+  document.getElementById('offBtnLabel').textContent = 'OFF';
+  const dot = document.querySelector('.power-dot');
+  dot.style.background = '#8bac0f';
+  dot.style.boxShadow  = '0 0 8px #8bac0f';
+  dot.style.animation  = 'pwrPulse 3s ease-in-out infinite';
+  display.showText('SHARP PC-1403');
+  setTimeout(() => display.showText('BASIC 1.1'), 700);
+  setTimeout(() => {
+    display.showText('');
+    display.setCursor(0);
+    setAngle('DEG');
+    basic.mode = 'CAL';
+    document.getElementById('i-run').classList.remove('on');
+    document.getElementById('i-pro').classList.remove('on');
+    addOut('── SHARP PC-1403 READY ──', true, 'sys');
+    addOut('CAL mode — type expressions or load a sample', true, 'sys');
+  }, 1400);
+}
+
+function powerOff() {
+  powered = false;
+  document.getElementById('calcBody').classList.add('powered-off');
+  basic.stop();
+  display.showText('');
+  display.setCursor(-1);
+  const dot = document.querySelector('.power-dot');
+  dot.style.background  = '#1a2a08';
+  dot.style.boxShadow   = 'none';
+  dot.style.animation   = 'none';
+  document.getElementById('ti').value = '';
+  document.getElementById('offBtnLabel').textContent = 'ON';
+  addOut('── POWER OFF ──', true, 'sys');
+}
+
+window.addEventListener('load', () => {
+  // Create display first with default size, then resize correctly
+  display = new PC1403Display(lcdCanvas);
+  basic   = new PC1403Basic(display, null);
+  basic.onPrint = (txt, nl) => addOut(txt, nl, 'output');
+  basic.onBeep  = beep;
+  basic.onModeChange = updateModeInds;
+
+  // Resize after layout is complete
+  setTimeout(() => { resizeLcd(); powerOn(); }, 80);
+
+  document.addEventListener('keydown', onPhysKey);
+
+  const ti = document.getElementById('ti');
+  ti.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); doEnter(); }
+    if (e.key === 'Escape') stopProg();
+  });
+  // Keep LCD synced as user types
+  ti.addEventListener('input', lcdSync);
+
+  window.addEventListener('resize', () => { setTimeout(resizeLcd, 50); });
+});
+
+// ── Output ──
+let partialLine = null;
+function addOut(text, nl, cls='output') {
+  const out = document.getElementById('tout');
+  if (!nl) {
+    if (!partialLine) {
+      partialLine = document.createElement('div');
+      partialLine.className = 'oline ' + cls;
+      out.appendChild(partialLine);
+    }
+    partialLine.textContent += text;
+  } else {
+    if (partialLine) { partialLine.textContent += text; partialLine = null; }
+    else {
+      const d = document.createElement('div');
+      d.className = 'oline ' + cls;
+      d.textContent = text;
+      out.appendChild(d);
+    }
+  }
+  out.scrollTop = out.scrollHeight;
+  const lines = out.querySelectorAll('.oline');
+  if (lines.length > 600) for (let i=0;i<60;i++) lines[i].remove();
+}
+
+function clearTerm() {
+  document.getElementById('tout').innerHTML='';
+  addOut('Ready.', true, 'sys');
+  partialLine = null;
+}
+
+// ── Run / Stop ──
+async function runProg() {
+  if (basic.running) { stopProg(); return; }
+  if (!basic.program.length) { addOut('No program loaded.', true, 'sys'); return; }
+  addOut('RUN', true, 'sys');
+  document.getElementById('runBadge').classList.add('on');
+  document.getElementById('i-run').classList.add('on');
+  display.setIndicator('RUN', true);
+  await basic.run();
+  document.getElementById('runBadge').classList.remove('on');
+  document.getElementById('i-run').classList.remove('on');
+  display.setIndicator('RUN', false);
+  addOut('Ready.', true, 'sys');
+}
+
+function stopProg() {
+  basic.stop();
+  document.getElementById('runBadge').classList.remove('on');
+  document.getElementById('i-run').classList.remove('on');
+  display.setIndicator('RUN', false);
+  if (basic.running || basic.inputMode) addOut('BREAK', true, 'sys');
+}
+
+// ── Command entry ──
+async function doEnter() {
+  const ti = document.getElementById('ti');
+  const cmd = ti.value.trim();
+  ti.value = '';
+  if (!cmd) return;
+
+  // Auto power on if needed
+  if (!powered) { powerOn(); setTimeout(() => doEnterCmd(cmd), 1500); return; }
+  doEnterCmd(cmd);
+}
+
+async function doEnterCmd(cmd) {
+
+  if (basic.inputMode) {
+    addOut(cmd, true, 'echo');
+    basic.handleKeyInput(cmd);
+    basic.handleKeyInput('Enter');
+    return;
+  }
+
+  addOut('> ' + cmd, true, 'echo');
+  const up = cmd.toUpperCase();
+  if (up === 'RUN')   { runProg(); return; }
+  if (up === 'STOP' || up === 'BRK') { stopProg(); return; }
+  if (up === 'CLS' || up === 'CLEAR') { clearTerm(); return; }
+  if (up === 'NEW')   { basic._initSystem(); addOut('OK', true, 'sys'); display.showText(''); return; }
+  await basic.execute(cmd);
+  lastAns = basic.variables && basic.variables['_ANS'] || lastAns;
+  // Do NOT call lcdSync() here — basic.execute() sets the LCD to the result.
+  // lcdSync() will fire again on the next keystroke when the user starts typing.
+}
+
+function onPhysKey(e) {
+  if (e.ctrlKey && e.key === 'c') { stopProg(); return; }
+  if (e.key === 'F5') { e.preventDefault(); runProg(); }
+}
+
+// ── Key press handler ──
+const getField = () => document.getElementById('ti');
+
+function kp(id) {
+  const shifted = shiftOn;
+
+  if (id === 'SHIFT') {
+    shiftOn = !shiftOn;
+    document.getElementById('shiftBtn').classList.toggle('on', shiftOn);
+    document.getElementById('i-shf').classList.toggle('on', shiftOn);
+    document.getElementById('kb').classList.toggle('shifted', shiftOn);
+    return;
+  }
+
+  // Reset shift
+  if (shiftOn && id !== 'SHIFT') {
+    shiftOn = false;
+    document.getElementById('shiftBtn').classList.remove('on');
+    document.getElementById('i-shf').classList.remove('on');
+    document.getElementById('kb').classList.remove('shifted');
+  }
+
+  const f = getField();
+
+  // Direct char insert mapping
+  const chars = {
+    '0':'0','1':'1','2':'2','3':'3','4':'4',
+    '5':'5','6':'6','7':'7','8':'8','9':'9',
+    'DOT':'.','ADD':'+','SUB':'-','MUL':'*','DIV':'/',
+    'PL':'(','PR':')','PL2':'(',
+    'EQ':'=','LT':'<','GT':'>',
+    'COMMA':',','SEMI':';','QUOT':'"',
+    'POW_KEY':'^','SPACE':' ',
+    'Q':'Q','W':'W','E':'E','R':'R','T':'T','Y':'Y','U':'U','I':'I','O':'O',
+    'A':'A','S':'S','D':'D','F':'F','G':'G','H':'H','J':'J','K':'K','L':'L',
+    'Z':'Z','X':'X','C':'C','V':'V','B':'B','N':'N','M':'M',
+    'SPC':' ',
+    'P':'P', 'COLON':':', 'DOT2':'.', 'SLASH':'/',
+  };
+
+  // Shifted overrides
+  const shiftedChars = {
+    'EQ':'<>','LT':'<=','GT':'>=','SEMI':':',
+    'POW_KEY':'E','PL2':']','SQR':'^2',
+  };
+
+  // String inserts (function names, keywords)
+  const fnInsert = {
+    'SIN':'SIN(','COS':'COS(','TAN':'TAN(',
+    'LOG':'LOG(','LN':'LN(','SQR':'SQR(',
+    'EXPF':'EXP(','POW':'^(','INV':'1/(',
+    'ABS':'ABS(','FRAC':'FRAC(',
+    'RND':'RND','PI':'PI',
+    'FOR_KEY':'FOR ','IF_KEY':'IF ','GOTO_KEY':'GOTO ',
+    'PRT_KEY':'PRINT ','LIST_KEY':'LIST',
+    'HYP':'',
+  };
+  const shiftedFn = {
+    'SIN':'ASN(','COS':'ACS(','TAN':'ATN(',
+    'LOG':'10^(','LN':'EXP(','SQR':'(^2',
+    'POW':'ʸ√(','INV':'FACT(',
+    'EXPF': String(Math.PI.toPrecision(10)),
+    'ABS':'SGN(','FRAC':'INT(',
+    'PI':'2*PI','RND':'',
+    'FOR_KEY':'NEXT ','IF_KEY':'THEN ',
+    'GOTO_KEY':'GOSUB ','PRT_KEY':'INPUT ',
+    'LIST_KEY':'DATA ','STAT':'NEW',
+    'DMS':'DMS(','DEG2':'GRA',
+    'MPLUS':'M-','MR':'MC',
+  };
+
+  // Block keys when powered off (except OFF itself)
+  if (!powered && id !== 'OFF') return;
+
+  switch(id) {
+    case 'ENTER':   doEnter(); return;
+    case 'BS':      f.value = f.value.slice(0,-1); lcdSync(); return;
+    case 'INS':     return;
+    case 'CLS':     f.value = ''; lcdSync(); clearTerm(); return;
+    case 'OFF':     powered ? powerOff() : powerOn(); return;
+    case 'MODE':    toggleMode(); return;
+    case 'CAL':
+      if (shifted) {
+        runProg();
+      } else {
+        setCalcMode('CAL');
+        document.getElementById('ti').value = '';
+        lcdSync();
+      }
+      return;
+    case 'STOP_KEY': stopProg(); return;
+    case 'DEG2':
+      if (shifted) setAngle('GRA');
+      else if (basic.angleMode === 'DEG') setAngle('RAD');
+      else if (basic.angleMode === 'RAD') setAngle('GRA');
+      else setAngle('DEG');
+      return;
+    case 'NEG':
+      f.value = f.value.startsWith('-') ? f.value.slice(1) : '-'+f.value;
+      break;
+    case 'MPLUS': {
+      try {
+        const v = basic.evalExpr(f.value||'0');
+        basic.variables['M'] = (basic.variables['M']||0) + (shifted ? -v : v);
+        document.getElementById('i-m').classList.add('on');
+        display.showText('M='+basic._formatNum(basic.variables['M']));
+        f.value = '';
+      } catch(e){}
+      lcdSync(); return;
+    }
+    case 'MR':
+      if (shifted) { basic.variables['M']=0; document.getElementById('i-m').classList.remove('on'); display.showText('M=0'); }
+      else f.value += basic._formatNum(basic.variables['M']||0);
+      break;
+    case 'ANS': f.value += String(lastAns); break;
+    case 'STAT':
+      if (shifted) { basic._initSystem(); addOut('NEW', true, 'sys'); display.showText(''); }
+      else runProg();
+      return;
+    case 'CUR_L': { const p=f.selectionStart; if(p>0) f.setSelectionRange(p-1,p-1); f.focus(); return; }
+    case 'CUR_R': { const p=f.selectionStart; f.setSelectionRange(p+1,p+1); f.focus(); return; }
+    case 'DMS': f.value += shifted ? 'DMS(' : 'DMS('; break;
+    default: {
+      let ins = '';
+      if (shifted) {
+        ins = shiftedChars[id] || shiftedFn[id] || chars[id] || '';
+      } else {
+        ins = fnInsert[id] !== undefined ? fnInsert[id] : (chars[id] || '');
+      }
+      if (ins) f.value += ins;
+      break;
+    }
+  }
+
+  // Always sync LCD after any key modifies the input
+  lcdSync();
+  f.focus();
+}
+
+function toggleMode() {
+  // MODE key cycles only between RUN and PRO
+  if (basic.mode === 'PRO') {
+    setCalcMode('RUN');
+  } else {
+    setCalcMode('PRO');
+  }
+}
+
+function setCalcMode(mode) {
+  basic.mode = mode;
+  const isRun = mode === 'RUN';
+  const isPro = mode === 'PRO';
+  const isCal = mode === 'CAL';
+  document.getElementById('i-run').classList.toggle('on', isRun);
+  document.getElementById('i-pro').classList.toggle('on', isPro);
+  // Show mode on LCD briefly
+  if (!isCal) {
+    display.showText(mode + ' MODE');
+    setTimeout(() => { if (!basic.running) lcdSync(); }, 800);
+  }
+  if (basic.onModeChange) basic.onModeChange(mode);
+}
+
+function updateModeInds(mode) {
+  document.getElementById('i-run').classList.toggle('on', mode==='RUN');
+  document.getElementById('i-pro').classList.toggle('on', mode==='PRO');
+}
+
+function setAngle(mode) {
+  if (basic) basic.angleMode = mode;
+  ['DEG','RAD','GRA'].forEach(m =>
+    document.getElementById('i-'+m.toLowerCase()).classList.toggle('on', m===mode)
+  );
+}
+
+// ── Samples ──
+const SAMPLES = {
+  hello:[
+    '10 PRINT "SHARP PC-1403"',
+    '20 PRINT "POCKET COMPUTER"',
+    '30 FOR I=1 TO 5',
+    '40 PRINT "LINE";I',
+    '50 NEXT I',
+    '60 PRINT "DONE!"',
+  ],
+  fibonacci:[
+    '10 PRINT "FIBONACCI:"',
+    '20 A=0:B=1',
+    '30 FOR I=1 TO 15',
+    '40 PRINT A;" ";',
+    '50 C=A+B:A=B:B=C',
+    '60 NEXT I',
+    '70 PRINT',
+  ],
+  trig:[
+    '10 DEG',
+    '20 PRINT "DEG  SIN    COS"',
+    '30 FOR D=0 TO 90 STEP 10',
+    '40 PRINT D;" ";INT(SIN(D)*10000)/10000;" ";INT(COS(D)*10000)/10000',
+    '50 NEXT D',
+  ],
+  prime:[
+    '10 PRINT "PRIMES TO 100:"',
+    '20 FOR N=2 TO 100',
+    '30 P=1',
+    '40 FOR D=2 TO SQR(N)',
+    '50 IF N/D=INT(N/D) THEN P=0',
+    '60 NEXT D',
+    '70 IF P=1 THEN PRINT N;" ";',
+    '80 NEXT N',
+    '90 PRINT',
+  ],
+  game:[
+    '10 PRINT "GUESS 1-100"',
+    '20 N=INT(RND*100)+1:T=0',
+    '30 T=T+1',
+    '40 INPUT "GUESS";G',
+    '50 IF G=N THEN PRINT "YES! ";T;" TRIES":END',
+    '60 IF G<N THEN PRINT "HIGHER"',
+    '70 IF G>N THEN PRINT "LOWER"',
+    '80 IF T<7 THEN GOTO 30',
+    '90 PRINT "ANSWER:";N',
+  ],
+  calc:[
+    '10 PRINT "RPN CALCULATOR"',
+    '20 PRINT "TYPE EXPRESSION"',
+    '30 INPUT "EXPR";A',
+    '40 PRINT "= ";A',
+    '50 GOTO 30',
+  ],
+};
+
+function loadSample(name) {
+  if (!SAMPLES[name]) return;
+  basic._initSystem();
+  clearTerm();
+  addOut('── '+name.toUpperCase()+' ──', true, 'sys');
+  for (const line of SAMPLES[name]) {
+    basic.execute(line);
+    addOut(line, true, 'output');
+  }
+  addOut('Loaded! Click ▶ (green dot) or type RUN', true, 'sys');
+}
+
+function toggleHelp() {
+  document.getElementById('hbody').classList.toggle('vis');
+  document.getElementById('harr').classList.toggle('open');
+}
+
+function beep() {
+  try {
+    const ac = new (window.AudioContext||window.webkitAudioContext)();
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.connect(g); g.connect(ac.destination);
+    o.frequency.value=880; o.type='square';
+    g.gain.setValueAtTime(0.08, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime+0.07);
+    o.start(); o.stop(ac.currentTime+0.07);
+  } catch(e){}
+}
+
+// Touch handling for calculator keys
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.k').forEach(btn => {
+    btn.addEventListener('touchstart', e => { e.preventDefault(); btn.classList.add('pressed'); }, {passive:false});
+    btn.addEventListener('touchend',   e => { e.preventDefault(); btn.classList.remove('pressed'); btn.click(); }, {passive:false});
+  });
+});
+
+
+
+
+/* ════════════════════════════════════════════════════════════
+   BASIC DEBUGGER — live monitor for the BASIC interpreter
+════════════════════════════════════════════════════════════ */
+
+function h2(v) { return (v & 0xFF).toString(16).toUpperCase().padStart(2,'0'); }
+function h4(v) { return (v & 0xFFFF).toString(16).toUpperCase().padStart(4,'0'); }
+
+let _dbgBreakLines = new Set();
+let _prevVarSnapshot = {};
+let _ramViewBase = 0;
+let _dbgRunInterval = null;
+
+// ══════════════════════════════════════════════════════════════
+//  BASIC DEBUGGER  —  live, step-accurate
+// ══════════════════════════════════════════════════════════════
+
+function fmtNum(n) {
+  if (n === undefined || n === null) return '0';
+  if (!isFinite(n)) return n > 0 ? '1E+99' : '-1E+99';
+  if (n === 0) return '0';
+  const abs = Math.abs(n);
+  if (abs >= 1e10 || (abs > 0 && abs < 1e-4)) return n.toExponential(4).toUpperCase();
+  return parseFloat(n.toPrecision(10)).toString();
+}
+
+// ── State ─────────────────────────────────────────────────────────────────
+let _dbgBreakLines   = new Set();
+let _prevVarSnapshot = {};
+let _ramViewBase     = 0;
+
+// Step-mode: a Promise that resolves when debugger says "go"
+let _stepResolve  = null;   // set when paused, null when free-running
+let _dbgMode      = 'idle'; // 'idle' | 'running' | 'stepping' | 'paused'
+
+// ── Install onStep hook into basic ────────────────────────────────────────
+function _installHook() {
+  if (!window.basic) return;
+  window.basic.onStep = (lineNum, lineIdx) => {
+    // Always refresh display
+    dbgRefresh();
+
+    // Check breakpoint
+    if (_dbgBreakLines.has(lineNum) && _dbgMode === 'running') {
+      _dbgMode = 'paused';
+      addOut(`⬛ Breakpoint @ line ${lineNum}`, true, 'sys');
+      dbgRefresh();
+    }
+
+    // If paused or stepping, return a Promise that blocks until user hits Step/Run
+    if (_dbgMode === 'paused' || _dbgMode === 'stepping') {
+      _dbgMode = 'paused';
+      _updateDbgBtns();
+      return new Promise(resolve => { _stepResolve = resolve; });
+    }
+  };
+}
+
+function _updateDbgBtns() {
+  const paused  = _dbgMode === 'paused';
+  const running = _dbgMode === 'running' || _dbgMode === 'stepping';
+  document.getElementById('dbg-step-btn').disabled = running && _dbgMode !== 'paused';
+  document.getElementById('dbg-run-btn').textContent  = paused ? 'CONT' : 'RUN';
+  document.getElementById('dbg-stop-btn').disabled = _dbgMode === 'idle';
+}
+
+// ── Master refresh ────────────────────────────────────────────────────────
+function dbgRefresh() {
+  if (!window.basic) return;
+  monUpdateStatus();
+  monUpdateVars();
+  monUpdateProgram();
+  monUpdateStack();
+  monUpdateRAM();
+}
+
+// ── Status ────────────────────────────────────────────────────────────────
+function monUpdateStatus() {
+  const el = document.getElementById('mon-status');
+  if (!el) return;
+  const b = window.basic;
+  const running = b.running;
+  const mode    = b.mode || 'CAL';
+  const angle   = b.angleMode || 'DEG';
+  let curLine   = '—';
+  if (b.program && b.lineIndex >= 0 && b.lineIndex < b.program.length)
+    curLine = b.program[b.lineIndex].lineNum;
+
+  const stateLabel = {idle:'■ IDLE', running:'▶ RUN', stepping:'▶ STEP', paused:'⏸ PAUSED'}[_dbgMode] || '■ IDLE';
+  const stateClass = (_dbgMode !== 'idle') ? 'ms-run' : '';
+
+  el.innerHTML =
+    `<span class="ms-chip ${stateClass}">${stateLabel}</span>` +
+    `<span class="ms-chip">${mode}</span>` +
+    `<span class="ms-chip">${angle}</span>` +
+    (running ? `<span class="ms-chip ms-line">LINE&nbsp;${curLine}</span>` : '') +
+    `<span class="ms-chip">STACK:${(b.stack||[]).length}</span>` +
+    `<span class="ms-chip">PROG:${(b.program||[]).length}</span>`;
+}
+
+// ── Variables ─────────────────────────────────────────────────────────────
+function monUpdateVars() {
+  const el = document.getElementById('mon-vars');
+  if (!el) return;
+  const b = window.basic;
+  const vars  = b.variables  || {};
+  const strs  = b.stringVars || {};
+  const arrs  = b.arrays     || {};
+  const numKeys = Object.keys(vars).sort();
+  const strKeys = Object.keys(strs).sort();
+  const arrKeys = Object.keys(arrs).sort();
+
+  if (!numKeys.length && !strKeys.length && !arrKeys.length) {
+    el.innerHTML = '<span class="mv-empty">No variables set</span>';
+    return;
+  }
+  let html = '';
+  for (const k of numKeys) {
+    const fmt = fmtNum(vars[k]);
+    const changed = _prevVarSnapshot[k] !== undefined && _prevVarSnapshot[k] !== fmt;
+    html += `<div class="mv-row${changed ? ' mv-changed' : ''}">` +
+            `<span class="mv-name">${k}</span><span class="mv-val">${fmt}</span></div>`;
+    _prevVarSnapshot[k] = fmt;
+  }
+  for (const k of strKeys) {
+    const v = String(strs[k]).slice(0, 20).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    html += `<div class="mv-row"><span class="mv-name">${k}</span>` +
+            `<span class="mv-val mv-str">"${v}"</span></div>`;
+  }
+  for (const k of arrKeys) {
+    const n = Object.keys(arrs[k]).length;
+    html += `<div class="mv-row"><span class="mv-name">${k}()</span>` +
+            `<span class="mv-val mv-arr">[${n} elem]</span></div>`;
+  }
+  el.innerHTML = html;
+}
+
+// ── Program listing ───────────────────────────────────────────────────────
+function monUpdateProgram() {
+  const el = document.getElementById('mon-prog');
+  if (!el) return;
+  const b   = window.basic;
+  const prog = b.program || [];
+  if (!prog.length) { el.innerHTML = '<span class="mv-empty">No program loaded</span>'; return; }
+  const curIdx = (b.running || _dbgMode !== 'idle') ? b.lineIndex : -1;
+  let html = '';
+  for (let i = 0; i < prog.length; i++) {
+    const { lineNum, src } = prog[i];
+    const isCur = i === curIdx;
+    const isBp  = _dbgBreakLines.has(lineNum);
+    const safe  = src.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const cls   = (isCur ? ' pl-cur' : '') + (isBp ? ' pl-bp' : '');
+    html += `<div class="pl-row${cls}" onclick="monToggleBp(${lineNum})" title="Toggle breakpoint">` +
+            `<span class="pl-ln">${lineNum}</span><span class="pl-src">${safe}</span></div>`;
+  }
+  el.innerHTML = html;
+  if (curIdx >= 0) {
+    const rows = el.querySelectorAll('.pl-row');
+    if (rows[curIdx]) rows[curIdx].scrollIntoView({ block: 'nearest' });
+  }
+}
+
+// ── Call stack ────────────────────────────────────────────────────────────
+function monUpdateStack() {
+  const el = document.getElementById('mon-stack');
+  if (!el) return;
+  const stack = (window.basic && window.basic.stack) || [];
+  if (!stack.length) { el.innerHTML = '<span class="mv-empty">Empty</span>'; return; }
+  let html = '';
+  const b = window.basic;
+  for (let i = stack.length - 1; i >= 0; i--) {
+    const f = stack[i];
+    if (f.type === 'FOR') {
+      const cur = fmtNum((b.variables || {})[f.varName]);
+      html += `<div class="sk-row">FOR <b>${f.varName}</b>=${cur} TO ${fmtNum(f.end)} STEP ${fmtNum(f.step)}</div>`;
+    } else if (f.type === 'GOSUB') {
+      const retLine = (b.program[f.returnIdx] || {}).lineNum || '?';
+      html += `<div class="sk-row">GOSUB → ret @ <b>${retLine}</b></div>`;
+    } else {
+      html += `<div class="sk-row">${f.type}</div>`;
+    }
+  }
+  el.innerHTML = html;
+}
+
+// ── RAM dump ──────────────────────────────────────────────────────────────
+function monUpdateRAM() {
+  const el = document.getElementById('mon-ram');
+  if (!el) return;
+  const b = window.basic;
+  if (!b || !b.ram) { el.innerHTML = '<span class="mv-empty">No RAM</span>'; return; }
+  const COLS = 8, ROWS = 8, base = _ramViewBase & ~7;
+  let html = '';
+  for (let row = 0; row < ROWS * COLS; row += COLS) {
+    const addr = base + row;
+    if (addr >= b.ram.length) break;
+    html += `<div class="hexdump-row"><span class="hx-addr">${h4(addr)}</span>`;
+    let asc = '';
+    for (let c = 0; c < COLS; c++) {
+      const a = addr + c;
+      const v = a < b.ram.length ? b.ram[a] : 0;
+      html += `<span class="hx-byte" title="${h4(a)}">${h2(v)}</span>`;
+      if (c === 3) html += `<span class="hx-sep">·</span>`;
+      asc += (v >= 0x20 && v < 0x7F) ? String.fromCharCode(v) : '·';
+    }
+    html += `<span class="hx-ascii">${asc}</span></div>`;
+  }
+  el.innerHTML = html || '<span class="mv-empty">Empty</span>';
+}
+
+function monRamGo() {
+  const v = parseInt(document.getElementById('mon-ram-addr').value, 16);
+  _ramViewBase = isNaN(v) ? 0 : v;
+  monUpdateRAM();
+}
+
+// ── Breakpoints ───────────────────────────────────────────────────────────
+function monToggleBp(lineNum) {
+  if (_dbgBreakLines.has(lineNum)) _dbgBreakLines.delete(lineNum);
+  else _dbgBreakLines.add(lineNum);
+  monUpdateBpList();
+  monUpdateProgram();
+}
+function monClearBps() {
+  _dbgBreakLines.clear();
+  monUpdateBpList();
+  monUpdateProgram();
+}
+function monUpdateBpList() {
+  const el = document.getElementById('mon-bps');
+  if (!el) return;
+  if (!_dbgBreakLines.size) {
+    el.innerHTML = '<span style="font-size:9px;color:#335">No breakpoints — click a line number to set one</span>';
+    return;
+  }
+  el.innerHTML = [..._dbgBreakLines].sort((a,b)=>a-b)
+    .map(ln => `<span class="bp-chip" onclick="monToggleBp(${ln})">● ${ln} ✕</span>`).join('');
+}
+
+// ── STEP button ────────────────────────────────────────────────────────────
+// If idle: starts program in step mode (executes line 0 then pauses)
+// If paused: executes exactly one more line then pauses again
+function monStep() {
+  const b = window.basic;
+  if (!b || !b.program.length) { addOut('No program loaded.', true, 'sys'); return; }
+
+  if (_dbgMode === 'idle') {
+    // Start fresh in step mode — set stepping so first onStep pauses after line 0
+    _dbgMode = 'stepping';
+    _updateDbgBtns();
+    b.run().then(() => {
+      _dbgMode = 'idle';
+      _stepResolve = null;
+      _updateDbgBtns();
+      dbgRefresh();
+    });
+    return;
+  }
+
+  if (_dbgMode === 'paused' && _stepResolve) {
+    // Execute exactly one more line, then pause again
+    _dbgMode = 'stepping';
+    _updateDbgBtns();
+    const res = _stepResolve;
+    _stepResolve = null;
+    res(); // unblock onStep, which will pause again after next line
+  }
+}
+
+// ── RUN / CONT button ──────────────────────────────────────────────────────
+function monRunTo() {
+  const b = window.basic;
+  if (!b || !b.program.length) { addOut('No program loaded.', true, 'sys'); return; }
+
+  if (_dbgMode === 'idle') {
+    // Start normally — onStep only pauses on breakpoints
+    _dbgMode = 'running';
+    _updateDbgBtns();
+    b.run().then(() => {
+      _dbgMode = 'idle';
+      _stepResolve = null;
+      _updateDbgBtns();
+      dbgRefresh();
+    });
+    return;
+  }
+
+  if (_dbgMode === 'paused' && _stepResolve) {
+    // Continue from breakpoint
+    _dbgMode = 'running';
+    _updateDbgBtns();
+    const res = _stepResolve;
+    _stepResolve = null;
+    res();
+  }
+}
+
+// ── STOP button ───────────────────────────────────────────────────────────
+function monStopDbg() {
+  const b = window.basic;
+  if (!b) return;
+  b.stop();
+  if (_stepResolve) { _stepResolve(); _stepResolve = null; }
+  _dbgMode = 'idle';
+  _updateDbgBtns();
+  addOut('Stopped.', true, 'sys');
+  dbgRefresh();
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+function _waitForBasic() {
+  if (window.basic) {
+    _installHook();
+    dbgRefresh();
+    monUpdateBpList();
+    _updateDbgBtns();
+    // Passive refresh when idle
+    setInterval(() => { if (_dbgMode === 'idle') dbgRefresh(); }, 500);
+  } else {
+    setTimeout(_waitForBasic, 100);
+  }
+}
+window.addEventListener('load', _waitForBasic);
+
+/* ════════════════════════════════════════════════════════════
+   SC61860 CPU MONITOR
+   — Independent CPU with its own 64KB flat RAM
+   — Disassembler, step/run/reset, breakpoints, memory editor
+════════════════════════════════════════════════════════════ */
+
+// ── Flat 64KB memory for the CPU ─────────────────────────────────────────
+const cpuMem = {
+  data: new Uint8Array(65536),
+  read(a)    { return this.data[a & 0xFFFF]; },
+  write(a,v) { this.data[a & 0xFFFF] = v & 0xFF; }
+};
+
+const cpuCore = new SC61860(cpuMem);
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function ch2(v) { return (v & 0xFF).toString(16).toUpperCase().padStart(2,'0'); }
+function ch4(v) { return (v & 0xFFFF).toString(16).toUpperCase().padStart(4,'0'); }
+
+// ── Tabs ──────────────────────────────────────────────────────────────────
+function cpuTabShow(name) {
+  ['regs','dasm','mem'].forEach(t => {
+    document.getElementById('tab-'+t).classList.toggle('active', t===name);
+    document.getElementById('tbd-'+t).classList.toggle('active', t===name);
+  });
+  if (name === 'dasm') cpuDisasmAt(cpuCore.PC);
+  if (name === 'mem')  cpuMemView();
+}
+
+// ── Register display ──────────────────────────────────────────────────────
+let _cpuPrevRegs = {};
+function cpuUpdateRegs() {
+  const set = (id, val, fmt) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const s = fmt(val);
+    el.classList.toggle('chg', _cpuPrevRegs[id] !== undefined && _cpuPrevRegs[id] !== s);
+    el.textContent = s;
+    _cpuPrevRegs[id] = s;
+  };
+  set('cr-A', cpuCore.A, ch2); set('cr-B', cpuCore.B, ch2);
+  set('cr-I', cpuCore.I, ch2); set('cr-J', cpuCore.J, ch2);
+  set('cr-K', cpuCore.K, ch2); set('cr-L', cpuCore.L, ch2);
+  set('cr-M', cpuCore.M, ch2); set('cr-N', cpuCore.N, ch2);
+  set('cr-P', cpuCore.P, ch2); set('cr-Q', cpuCore.Q, ch2);
+  set('cr-R', cpuCore.R, ch2); set('cr-H', cpuCore.H, ch2);
+  set('cr-PC', cpuCore.PC, ch4); set('cr-DP', cpuCore.DP, ch4);
+  set('cr-X',  cpuCore.X,  ch4); set('cr-Y',  cpuCore.Y,  ch4);
+  set('cr-CYC', cpuCore.cycles, v => v.toString());
+  document.getElementById('cf-C').classList.toggle('on', !!cpuCore.carry);
+  document.getElementById('cf-Z').classList.toggle('on', !!cpuCore.zero);
+  document.getElementById('cf-H').classList.toggle('on', !!cpuCore.halted);
+}
+
+// ── SC61860 Disassembler ──────────────────────────────────────────────────
+const _mnemonics = {
+  0x00:'LII', 0x01:'LIJ', 0x02:'LIA', 0x03:'LIB',
+  0x04:'IX',  0x05:'DX',  0x06:'IY',  0x07:'DY',
+  0x08:'MVW', 0x09:'EXW', 0x0A:'MVB', 0x0B:'EXB',
+  0x0C:'ADN', 0x0D:'SBN', 0x0E:'ADW', 0x0F:'SBW',
+  0x10:'LIDP',0x11:'LIDL',0x12:'LIP', 0x13:'LIQ',
+  0x14:'ADB', 0x15:'SBB',
+  0x18:'MVWD',0x19:'EXWD',0x1A:'MVBD',0x1B:'EXBD',
+  0x1C:'SRW', 0x1D:'SLW', 0x1E:'FILM',0x1F:'FILD',
+  0x20:'LDP', 0x21:'LDQ', 0x22:'LDR', 0x23:'CLRA',
+  0x24:'IXL', 0x25:'DXL', 0x26:'IYS', 0x27:'DYS',
+  0x28:'JRNZP',0x29:'JRNZM',0x2A:'JRNCM',0x2B:'JRNCM',
+  0x2C:'JRP', 0x2D:'JRM', 0x2F:'LOOP',
+  0x30:'STP', 0x31:'STQ', 0x32:'STR', 0x33:'STH',
+  0x34:'PUSH',0x35:'DATA',0x37:'RTN',
+  0x38:'JRZP',0x39:'JRZM',0x3A:'JRCP',0x3B:'JRCM',
+  0x40:'INCI',0x41:'DECI',0x42:'INCA',0x43:'DECA',
+  0x44:'ADM', 0x45:'SBM', 0x46:'ANMA',0x47:'ORMA',
+  0x48:'INCK',0x49:'DECK',0x4A:'INCM',0x4B:'DECM',
+  0x4C:'INA', 0x4D:'NOPW',0x4E:'WAIT',0x4F:'CUP',
+  0x50:'INCP',0x51:'DECP',
+  0x52:'STD', 0x53:'MVDM',0x55:'MVMD',0x57:'LDD',
+  0x58:'SWP', 0x59:'LDM', 0x5A:'SL',  0x5B:'POP',
+  0x5D:'OUTA',0x5F:'OUTF',
+  0x60:'ANIM',0x61:'ORIM',0x62:'TSIM',0x63:'CPIM',
+  0x64:'ANIA',0x65:'ORIA',0x66:'TSIA',0x67:'CPIA',
+  0x69:'DTC', 0x6B:'TEST',0x6F:'CDN',
+  0x70:'ADIM',0x71:'SBIM',0x74:'ADIA',0x75:'SBIA',
+  0x78:'CALL',0x79:'JP',  0x7A:'PTC', 0x7B:'HALT',
+  0x7C:'JPNZ',0x7D:'JPNC',0x7E:'JPZ', 0x7F:'JPC',
+  0xC0:'INCJ',0xC1:'DECJ',0xC2:'INCB',0xC3:'DECB',
+  0xC4:'ADCM',0xC5:'SBCM',0xC6:'TSMA',0xC7:'CPMA',
+  0xC8:'INCL',0xC9:'DECL',0xCA:'INCN',0xCB:'DECN',
+  0xCC:'NOP', 0xCE:'NOPT',
+  0xD0:'SC',  0xD1:'RC',  0xD2:'SR',
+  0xD4:'ANID',0xD5:'ORID',0xD6:'TSID',0xD7:'CPID',
+  0xD8:'LEAVE',0xDA:'EXAB',0xDB:'EXAM',
+  0xDD:'OUTB',0xDF:'OUTC',
+};
+const _imm1 = new Set([
+  0x00,0x01,0x02,0x03,0x11,0x12,0x13,
+  0x28,0x29,0x2A,0x2B,0x2C,0x2D,0x2F,
+  0x38,0x39,0x3A,0x3B,0x4E,
+  0x60,0x61,0x62,0x63,0x64,0x65,0x66,0x67,
+  0x6B,0x70,0x71,0x74,0x75,
+  0xD4,0xD5,0xD6,0xD7,
+]);
+const _addr16 = new Set([0x10,0x78,0x79,0x7C,0x7D,0x7E,0x7F]);
+
+function cpuDisasm1(addr) {
+  const rb = a => cpuMem.read(a & 0xFFFF);
+  const op = rb(addr);
+  if (op >= 0x80 && op <= 0xBF)
+    return { mnem:'LP', ops:`${ch2(op-0x80)}h`, size:1 };
+  if (op >= 0xE0 && op <= 0xFF) {
+    const lo = rb(addr+1);
+    return { mnem:'CAL', ops:ch4(((op&0x1F)<<8)|lo), size:2 };
+  }
+  const mnem = _mnemonics[op] || `DB`;
+  let ops='', size=1;
+  if (_imm1.has(op))   { ops=`#${ch2(rb(addr+1))}h`; size=2; }
+  else if (_addr16.has(op)) { ops=ch4((rb(addr+1)<<8)|rb(addr+2)); size=3; }
+  else if (op===0x7A)  { ops=`#${ch2(rb(addr+1))}h,${ch4((rb(addr+2)<<8)|rb(addr+3))}`; size=4; }
+  return { mnem, ops, size };
+}
+
+let _cpuBps = new Set();
+let _cpuDasmBase = 0;
+
+function cpuDisasmAt(startAddr) {
+  _cpuDasmBase = startAddr & 0xFFFF;
+  const el = document.getElementById('cpu-dasm');
+  if (!el) return;
+  let html='', addr=_cpuDasmBase;
+  for (let i=0; i<28; i++) {
+    const {mnem,ops,size} = cpuDisasm1(addr);
+    const isCur = addr===cpuCore.PC, isBp=_cpuBps.has(addr);
+    let byteStr='';
+    for (let b=0;b<Math.min(size,4);b++) byteStr+=ch2(cpuMem.read((addr+b)&0xFFFF))+' ';
+    const cls=(isCur?' cur':'')+(isBp?' bp':'');
+    const a=addr;
+    html+=`<div class="dl${cls}" onclick="cpuBpToggle(${a})" title="Click: toggle BP">` +
+          `<span class="da">${ch4(addr)}</span>` +
+          `<span class="db">${byteStr.trim()}</span>` +
+          `<span class="dm">${mnem}</span>` +
+          `<span class="do">${ops}</span></div>`;
+    addr=(addr+Math.max(size,1))&0xFFFF;
+  }
+  el.innerHTML=html;
+  const inp=document.getElementById('dasm-addr');
+  if (inp) inp.value=ch4(_cpuDasmBase);
+}
+
+function cpuBpToggle(addr) {
+  _cpuBps.has(addr)?_cpuBps.delete(addr):_cpuBps.add(addr);
+  cpuBpRender(); cpuDisasmAt(_cpuDasmBase);
+}
+function cpuBpClear() { _cpuBps.clear(); cpuBpRender(); cpuDisasmAt(_cpuDasmBase); }
+function cpuBpRender() {
+  const el=document.getElementById('cpu-bps'); if(!el) return;
+  if(!_cpuBps.size){el.innerHTML='<span style="font-size:9px;color:#224">No breakpoints</span>';return;}
+  el.innerHTML=[..._cpuBps].sort((a,b)=>a-b)
+    .map(a=>`<span class="bp-chip" onclick="cpuBpToggle(${a})">● ${ch4(a)} ✕</span>`).join('');
+}
+
+// ── Step / Run / Reset ────────────────────────────────────────────────────
+function cpuStep() {
+  if (cpuCore.halted) { addOut('CPU HALTED — use RST', true,'sys'); return; }
+  cpuCore.step();
+  cpuUpdateRegs();
+  cpuDisasmAt(cpuCore.PC);
+  cpuMemViewAt(document.getElementById('mem-view-addr')?._memBase || 0, false);
+}
+
+let _cpuRunning = false;
+let _cpuRunTick = null;
+
+function cpuRun() {
+  if (_cpuRunning) {
+    // Pause
+    _cpuRunning=false;
+    clearInterval(_cpuRunTick); _cpuRunTick=null;
+    document.getElementById('cpuRunBtn').textContent='RUN';
+    document.getElementById('cpuRunBtn').classList.remove('active');
+    cpuUpdateRegs(); cpuDisasmAt(cpuCore.PC);
+  } else {
+    if (cpuCore.halted) { addOut('CPU HALTED — use RST', true, 'sys'); return; }
+    _cpuRunning=true;
+    document.getElementById('cpuRunBtn').textContent='PAUSE';
+    document.getElementById('cpuRunBtn').classList.add('active');
+    _cpuRunTick = setInterval(() => {
+      for (let i=0;i<200;i++) {
+        cpuCore.step();
+        if (cpuCore.halted || _cpuBps.has(cpuCore.PC)) break;
+      }
+      cpuUpdateRegs();
+      if (cpuCore.halted) {
+        _cpuRunning=false; clearInterval(_cpuRunTick); _cpuRunTick=null;
+        document.getElementById('cpuRunBtn').textContent='RUN';
+        document.getElementById('cpuRunBtn').classList.remove('active');
+        addOut('CPU HALTED', true, 'sys');
+        cpuDisasmAt(cpuCore.PC);
+      } else if (_cpuBps.has(cpuCore.PC)) {
+        _cpuRunning=false; clearInterval(_cpuRunTick); _cpuRunTick=null;
+        document.getElementById('cpuRunBtn').textContent='RUN';
+        document.getElementById('cpuRunBtn').classList.remove('active');
+        addOut(`CPU breakpoint @ ${ch4(cpuCore.PC)}`, true, 'sys');
+        cpuDisasmAt(cpuCore.PC);
+      }
+    }, 40);
+  }
+}
+
+function cpuReset() {
+  if (_cpuRunning) { clearInterval(_cpuRunTick); _cpuRunning=false;
+    document.getElementById('cpuRunBtn').textContent='RUN';
+    document.getElementById('cpuRunBtn').classList.remove('active'); }
+  cpuCore.reset(); cpuUpdateRegs(); cpuDisasmAt(0);
+  addOut('CPU reset.', true, 'sys');
+}
+
+// ── Memory viewer ─────────────────────────────────────────────────────────
+let _memViewBase = 0;
+
+function cpuMemView() {
+  const v = parseInt(document.getElementById('mem-view-addr').value, 16);
+  _memViewBase = isNaN(v) ? 0 : v & 0xFFF0;
+  _cpuRenderMem();
+}
+function cpuMemViewAt(addr, updateInput=true) {
+  _memViewBase = addr & 0xFFF0;
+  if (updateInput) {
+    const inp = document.getElementById('mem-view-addr');
+    if (inp) inp.value = ch4(_memViewBase);
+  }
+  _cpuRenderMem();
+}
+function _cpuRenderMem() {
+  const el = document.getElementById('cpu-mem'); if (!el) return;
+  const COLS=8, ROWS=10, base=_memViewBase;
+  let html='';
+  for (let row=0;row<ROWS*COLS;row+=COLS) {
+    const addr=base+row;
+    html+=`<div class="hexdump-row"><span class="hx-addr">${ch4(addr)}</span>`;
+    let asc='';
+    for (let c=0;c<COLS;c++) {
+      const a=addr+c, v=cpuMem.read(a);
+      const isCur=a===cpuCore.PC, isDP=a===cpuCore.DP, isBp=_cpuBps.has(a);
+      const cls=(isCur?' hi':'')+(isDP&&!isCur?' hx-dp':'')+(isBp?' bp':'');
+      html+=`<span class="hx-byte${cls}" title="${ch4(a)}" onclick="cpuBpToggle(${a})">${ch2(v)}</span>`;
+      if (c===3) html+=`<span class="hx-sep">·</span>`;
+      asc+=(v>=0x20&&v<0x7F)?String.fromCharCode(v):'·';
+    }
+    html+=`<span class="hx-ascii">${asc}</span></div>`;
+  }
+  el.innerHTML=html;
+}
+
+// ── Memory loader ─────────────────────────────────────────────────────────
+// Accepts: "0100 02 05 03 ..." or Intel HEX (:LLAAAARR...) or raw hex pairs
+function cpuLoadHex() {
+  const raw = document.getElementById('cpu-load-input').value.trim();
+  const addrIn = document.getElementById('cpu-load-addr').value.trim();
+
+  if (!raw) { addOut('Nothing to load.', true,'sys'); return; }
+
+  // Detect Intel HEX
+  if (raw.startsWith(':')) {
+    let count=0;
+    for (const line of raw.split(/\r?\n/)) {
+      const l=line.trim();
+      if (!l.startsWith(':')) continue;
+      const type=parseInt(l.substr(7,2),16);
+      if (type===1) break; // EOF
+      if (type===0) {
+        const byteCount=parseInt(l.substr(1,2),16);
+        const addr=parseInt(l.substr(3,4),16);
+        for (let i=0;i<byteCount;i++) {
+          cpuMem.write(addr+i, parseInt(l.substr(9+i*2,2),16));
+          count++;
+        }
+      }
+    }
+    addOut(`Loaded ${count} bytes (Intel HEX).`, true,'sys');
+    cpuMemViewAt(0); cpuDisasmAt(0); return;
+  }
+
+  // Plain hex: optional base address then byte pairs
+  const tokens = raw.replace(/[^0-9a-fA-F\s]/g,'').trim().split(/\s+/).filter(Boolean);
+  let base = parseInt(addrIn, 16);
+  if (isNaN(base)) base = 0;
+  let count=0;
+  for (const tok of tokens) {
+    if (tok.length === 4 && count===0) { base=parseInt(tok,16); continue; }
+    if (tok.length!==2) {
+      // skip non-byte tokens
+      if (tok.length>2) { base=parseInt(tok,16); continue; }
+      continue;
+    }
+    cpuMem.write(base+count, parseInt(tok,16));
+    count++;
+  }
+  document.getElementById('cpu-load-addr').value = ch4(base);
+  addOut(`Loaded ${count} bytes at ${ch4(base)}.`, true,'sys');
+  cpuMemViewAt(base); cpuDisasmAt(base);
+}
+
+// ── Fill all memory to 00 ─────────────────────────────────────────────────
+function cpuMemFill() {
+  cpuMem.data.fill(0); cpuCore.reset();
+  addOut('CPU memory cleared + CPU reset.', true,'sys');
+  cpuUpdateRegs(); _cpuRenderMem(); cpuDisasmAt(0);
+}
+
+// ── Dump current view window as hex string ────────────────────────────────
+function cpuMemDumpHex() {
+  let s=ch4(_memViewBase)+'\n';
+  for (let i=0;i<128;i++) {
+    s+=ch2(cpuMem.read((_memViewBase+i)&0xFFFF));
+    s+=(i%8===7)?'\n':' ';
+  }
+  return s.trim();
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    cpuUpdateRegs();
+    cpuDisasmAt(0);
+    cpuBpRender();
+    _cpuRenderMem();
+  }, 400);
+});
+
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+</script>
+</body>
+</html>
