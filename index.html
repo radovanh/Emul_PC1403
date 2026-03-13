@@ -569,6 +569,62 @@ footer a:hover{color:#8bac0f}
   .main-layout { flex-wrap: wrap; }
 }
 
+
+/* ── CPU Monitor tabs ── */
+.cpu-tabs { display:flex; border-bottom:1px solid rgba(0,180,255,.15); }
+.cpu-tab {
+  flex:1; padding:5px 4px; text-align:center;
+  font-family:'Orbitron',sans-serif; font-size:8px; letter-spacing:1px;
+  color:#336688; cursor:pointer; border-bottom:2px solid transparent;
+  transition:all .15s; user-select:none;
+}
+.cpu-tab:hover { color:#00b4ff; }
+.cpu-tab.active { color:#00b4ff; border-bottom-color:#00b4ff; }
+.cpu-tab-body { display:none; }
+.cpu-tab-body.active { display:block; }
+
+/* ── Reg grid (reused) ── */
+.regs-grid2 {
+  display:grid; grid-template-columns:repeat(4,1fr); gap:3px; padding:7px;
+}
+.rc { background:#0d1a24; border:1px solid rgba(0,180,255,.1);
+      border-radius:4px; padding:3px 5px; text-align:center; }
+.rc .rn { font-size:7px; color:#00b4ff; letter-spacing:1px; }
+.rc .rv { font-size:12px; color:#e0f4ff; font-family:'Share Tech Mono',monospace; }
+.rc .rv.chg { color:#ffcc00; }
+.regs-wide2 { display:grid; grid-template-columns:repeat(4,1fr); gap:3px; padding:0 7px 7px; }
+.flags-row2 { display:flex; gap:5px; padding:0 7px 7px; align-items:center; }
+.flag2 { background:#0d1a24; border:1px solid rgba(0,180,255,.1);
+         border-radius:3px; padding:2px 7px; font-size:10px; color:#223344; transition:all .15s; }
+.flag2.on { background:rgba(0,180,255,.15); border-color:#00b4ff; color:#00b4ff; }
+.cyc2 { margin-left:auto; font-size:9px; color:#336; }
+.cyc2 span { color:#00b4ff; }
+
+/* ── Disassembler ── */
+.disasm2 { padding:5px 7px; font-size:10.5px; max-height:220px; overflow-y:auto; }
+.dl { display:flex; gap:6px; padding:2px 3px; border-radius:3px; cursor:pointer; align-items:baseline; }
+.dl:hover { background:rgba(0,180,255,.07); }
+.dl.cur  { background:rgba(0,180,255,.13); border-left:2px solid #00b4ff; padding-left:1px; }
+.dl.bp   { background:rgba(255,60,60,.08); border-left:2px solid #ff6060; padding-left:1px; }
+.dl.cur.bp { background:rgba(255,140,0,.12); border-left:2px solid #ff9900; padding-left:1px; }
+.da { color:#336688; min-width:36px; font-size:9px; }
+.db { color:#1e4060; min-width:52px; font-size:9px; }
+.dm { color:#7ad4a8; min-width:44px; }
+.do { color:#b0c8e0; }
+
+/* ── Memory editor ── */
+.mem-toolbar { display:flex; gap:4px; padding:5px 7px 0; flex-wrap:wrap; align-items:center; }
+.mem-toolbar label { font-size:9px; color:#336688; }
+.mem-hexdump { padding:5px 7px 7px; font-size:10.5px; max-height:190px; overflow-y:auto; }
+.cpu-textarea {
+  width:100%; box-sizing:border-box; background:#060e14;
+  border:1px solid rgba(0,180,255,.2); border-radius:4px;
+  color:#7ad4a8; font-family:'Share Tech Mono',monospace; font-size:10px;
+  padding:4px 6px; resize:vertical; min-height:52px; outline:none;
+  margin:0 7px; width:calc(100% - 14px);
+}
+.cpu-textarea::placeholder { color:rgba(0,180,255,.25); }
+
 </style>
 </head>
 <body>
@@ -830,9 +886,9 @@ footer a:hover{color:#8bac0f}
     <div class="cpu-hdr">
       <div class="cpu-hdr-title">BASIC DEBUGGER</div>
       <div class="cpu-hdr-btns">
-        <button class="cpu-btn go"     onclick="monStep()"    title="Step one BASIC line">STEP</button>
-        <button class="cpu-btn go"     onclick="monRunTo()"   title="Run to next breakpoint">RUN</button>
-        <button class="cpu-btn danger" onclick="stopProg()"   title="Stop execution">STOP</button>
+        <button class="cpu-btn go"     id="dbg-step-btn" onclick="monStep()"    title="Step one BASIC line">STEP</button>
+        <button class="cpu-btn go"     id="dbg-run-btn"  onclick="monRunTo()"   title="Run / continue">RUN</button>
+        <button class="cpu-btn danger" id="dbg-stop-btn" onclick="monStopDbg()" title="Stop execution">STOP</button>
       </div>
     </div>
     <div class="cpu-body">
@@ -893,6 +949,93 @@ footer a:hover{color:#8bac0f}
       <div class="hexdump" id="mon-ram"></div>
     </div>
   </div>
+
+
+  <!-- ── SC61860 CPU MONITOR ── -->
+  <div class="cpu-panel">
+    <div class="cpu-hdr">
+      <div class="cpu-hdr-title">SC61860 CPU MONITOR</div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="cpu-tabs">
+      <div class="cpu-tab active"  id="tab-regs"  onclick="cpuTabShow('regs')">REGS</div>
+      <div class="cpu-tab"         id="tab-dasm"  onclick="cpuTabShow('dasm')">DISASM</div>
+      <div class="cpu-tab"         id="tab-mem"   onclick="cpuTabShow('mem')">MEMORY</div>
+    </div>
+
+    <!-- REGISTERS tab -->
+    <div class="cpu-tab-body active" id="tbd-regs">
+      <div class="regs-grid2">
+        <div class="rc"><div class="rn">A</div><div class="rv" id="cr-A">00</div></div>
+        <div class="rc"><div class="rn">B</div><div class="rv" id="cr-B">00</div></div>
+        <div class="rc"><div class="rn">I</div><div class="rv" id="cr-I">00</div></div>
+        <div class="rc"><div class="rn">J</div><div class="rv" id="cr-J">00</div></div>
+        <div class="rc"><div class="rn">K</div><div class="rv" id="cr-K">00</div></div>
+        <div class="rc"><div class="rn">L</div><div class="rv" id="cr-L">00</div></div>
+        <div class="rc"><div class="rn">M</div><div class="rv" id="cr-M">00</div></div>
+        <div class="rc"><div class="rn">N</div><div class="rv" id="cr-N">00</div></div>
+        <div class="rc"><div class="rn">P</div><div class="rv" id="cr-P">00</div></div>
+        <div class="rc"><div class="rn">Q</div><div class="rv" id="cr-Q">00</div></div>
+        <div class="rc"><div class="rn">R</div><div class="rv" id="cr-R">5B</div></div>
+        <div class="rc"><div class="rn">H</div><div class="rv" id="cr-H">00</div></div>
+      </div>
+      <div class="regs-wide2">
+        <div class="rc"><div class="rn">PC</div><div class="rv" id="cr-PC">0000</div></div>
+        <div class="rc"><div class="rn">DP</div><div class="rv" id="cr-DP">0000</div></div>
+        <div class="rc"><div class="rn">X</div> <div class="rv" id="cr-X">0000</div></div>
+        <div class="rc"><div class="rn">Y</div> <div class="rv" id="cr-Y">0000</div></div>
+      </div>
+      <div class="flags-row2">
+        <span class="flag2" id="cf-C">C</span>
+        <span class="flag2" id="cf-Z">Z</span>
+        <span class="flag2" id="cf-H">HALT</span>
+        <div class="cyc2">CYCLES <span id="cr-CYC">0</span></div>
+      </div>
+      <div class="cpu-hdr-btns" style="padding:0 7px 7px;gap:4px;display:flex;">
+        <button class="cpu-btn go"    onclick="cpuStep()"  title="Step one instruction">STEP</button>
+        <button class="cpu-btn go"    id="cpuRunBtn" onclick="cpuRun()"  title="Run/Pause">RUN</button>
+        <button class="cpu-btn danger" onclick="cpuReset()" title="Reset CPU">RST</button>
+      </div>
+    </div>
+
+    <!-- DISASSEMBLER tab -->
+    <div class="cpu-tab-body" id="tbd-dasm">
+      <div class="cpu-input-row" style="padding:5px 7px 0;">
+        <input class="cpu-input" id="dasm-addr" placeholder="addr (hex)" maxlength="6"
+               onkeydown="if(event.key==='Enter') cpuDisasmAt(parseInt(this.value,16)||0)">
+        <button class="cpu-btn" onclick="cpuDisasmAt(parseInt(document.getElementById('dasm-addr').value,16)||0)">GO</button>
+        <button class="cpu-btn" onclick="cpuDisasmAt(cpuCore.PC)">@PC</button>
+        <button class="cpu-btn" onclick="cpuBpToggle(cpuCore.PC)">BP</button>
+        <button class="cpu-btn danger" onclick="cpuBpClear()">CLR</button>
+      </div>
+      <div class="disasm2" id="cpu-dasm"></div>
+      <div class="bp-list"  id="cpu-bps" style="padding:4px 7px 7px;"></div>
+    </div>
+
+    <!-- MEMORY tab -->
+    <div class="cpu-tab-body" id="tbd-mem">
+      <div class="mem-toolbar">
+        <label>View addr:</label>
+        <input class="cpu-input" id="mem-view-addr" placeholder="hex" maxlength="6" style="width:70px;"
+               onkeydown="if(event.key==='Enter') cpuMemView()">
+        <button class="cpu-btn" onclick="cpuMemView()">GO</button>
+        <button class="cpu-btn" onclick="cpuMemViewAt(cpuCore.PC)">@PC</button>
+        <button class="cpu-btn" onclick="cpuMemViewAt(cpuCore.DP)">@DP</button>
+      </div>
+      <div class="mem-hexdump" id="cpu-mem"></div>
+      <div style="padding:3px 7px 3px;font-size:9px;color:#336688;">LOAD HEX — addr (hex) + space + bytes (hex pairs)</div>
+      <textarea class="cpu-textarea" id="cpu-load-input"
+        placeholder="e.g.  0100 LII 05 LIA 03 ADN JP 0100"></textarea>
+      <div class="cpu-input-row" style="padding:4px 7px 7px;">
+        <input class="cpu-input" id="cpu-load-addr" placeholder="load addr (hex)" maxlength="6" style="width:100px;">
+        <button class="cpu-btn go" onclick="cpuLoadHex()">LOAD</button>
+        <button class="cpu-btn" onclick="cpuMemFill()">FILL 00</button>
+        <button class="cpu-btn" onclick="document.getElementById('cpu-load-input').value=cpuMemDumpHex()">DUMP</button>
+      </div>
+    </div>
+
+  </div><!-- /SC61860 CPU MONITOR panel -->
 
 </div><!-- /cpu-monitor -->
 
@@ -2927,7 +3070,14 @@ class PC1403Basic {
     while (this.running && this.lineIndex < this.program.length) {
       const line = this.program[this.lineIndex];
       this._jumped = false;
-      
+
+      // Per-line hook: if onStep returns a Promise, await it (allows pause/step)
+      if (this.onStep) {
+        const r = this.onStep(line.lineNum, this.lineIndex);
+        if (r && typeof r.then === 'function') await r;
+        if (!this.running) break; // onStep may have stopped us
+      }
+
       try {
         await this.executeLine(line.src);
       } catch(e) {
@@ -2940,10 +3090,8 @@ class PC1403Basic {
       
       if (!this._jumped) this.lineIndex++;
       
-      // Yield to browser occasionally
-      if (this.lineIndex % 100 === 0) {
-        await this._sleep(0);
-      }
+      // Yield to browser every line so UI stays responsive
+      await this._sleep(0);
     }
     
     this.running = false;
@@ -3474,18 +3622,60 @@ let _prevVarSnapshot = {};
 let _ramViewBase = 0;
 let _dbgRunInterval = null;
 
-// ── Format a BASIC number ────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+//  BASIC DEBUGGER  —  live, step-accurate
+// ══════════════════════════════════════════════════════════════
+
 function fmtNum(n) {
   if (n === undefined || n === null) return '0';
-  if (!isFinite(n)) return (n > 0) ? '1E+99' : '-1E+99';
+  if (!isFinite(n)) return n > 0 ? '1E+99' : '-1E+99';
   if (n === 0) return '0';
   const abs = Math.abs(n);
-  if (abs >= 1e10 || (abs > 0 && abs < 1e-4))
-    return n.toExponential(4).toUpperCase();
+  if (abs >= 1e10 || (abs > 0 && abs < 1e-4)) return n.toExponential(4).toUpperCase();
   return parseFloat(n.toPrecision(10)).toString();
 }
 
-// ── Master refresh ───────────────────────────────────────────────────────
+// ── State ─────────────────────────────────────────────────────────────────
+let _dbgBreakLines   = new Set();
+let _prevVarSnapshot = {};
+let _ramViewBase     = 0;
+
+// Step-mode: a Promise that resolves when debugger says "go"
+let _stepResolve  = null;   // set when paused, null when free-running
+let _dbgMode      = 'idle'; // 'idle' | 'running' | 'stepping' | 'paused'
+
+// ── Install onStep hook into basic ────────────────────────────────────────
+function _installHook() {
+  if (!window.basic) return;
+  window.basic.onStep = (lineNum, lineIdx) => {
+    // Always refresh display
+    dbgRefresh();
+
+    // Check breakpoint
+    if (_dbgBreakLines.has(lineNum) && _dbgMode === 'running') {
+      _dbgMode = 'paused';
+      addOut(`⬛ Breakpoint @ line ${lineNum}`, true, 'sys');
+      dbgRefresh();
+    }
+
+    // If paused or stepping, return a Promise that blocks until user hits Step/Run
+    if (_dbgMode === 'paused' || _dbgMode === 'stepping') {
+      _dbgMode = 'paused';
+      _updateDbgBtns();
+      return new Promise(resolve => { _stepResolve = resolve; });
+    }
+  };
+}
+
+function _updateDbgBtns() {
+  const paused  = _dbgMode === 'paused';
+  const running = _dbgMode === 'running' || _dbgMode === 'stepping';
+  document.getElementById('dbg-step-btn').disabled = running && _dbgMode !== 'paused';
+  document.getElementById('dbg-run-btn').textContent  = paused ? 'CONT' : 'RUN';
+  document.getElementById('dbg-stop-btn').disabled = _dbgMode === 'idle';
+}
+
+// ── Master refresh ────────────────────────────────────────────────────────
 function dbgRefresh() {
   if (!window.basic) return;
   monUpdateStatus();
@@ -3495,7 +3685,7 @@ function dbgRefresh() {
   monUpdateRAM();
 }
 
-// ── Status bar ───────────────────────────────────────────────────────────
+// ── Status ────────────────────────────────────────────────────────────────
 function monUpdateStatus() {
   const el = document.getElementById('mon-status');
   if (!el) return;
@@ -3504,11 +3694,14 @@ function monUpdateStatus() {
   const mode    = b.mode || 'CAL';
   const angle   = b.angleMode || 'DEG';
   let curLine   = '—';
-  if (running && b.program && b.lineIndex >= 0 && b.lineIndex < b.program.length)
+  if (b.program && b.lineIndex >= 0 && b.lineIndex < b.program.length)
     curLine = b.program[b.lineIndex].lineNum;
 
+  const stateLabel = {idle:'■ IDLE', running:'▶ RUN', stepping:'▶ STEP', paused:'⏸ PAUSED'}[_dbgMode] || '■ IDLE';
+  const stateClass = (_dbgMode !== 'idle') ? 'ms-run' : '';
+
   el.innerHTML =
-    `<span class="ms-chip ${running ? 'ms-run' : ''}">${running ? '▶ RUN' : '■ IDLE'}</span>` +
+    `<span class="ms-chip ${stateClass}">${stateLabel}</span>` +
     `<span class="ms-chip">${mode}</span>` +
     `<span class="ms-chip">${angle}</span>` +
     (running ? `<span class="ms-chip ms-line">LINE&nbsp;${curLine}</span>` : '') +
@@ -3516,7 +3709,7 @@ function monUpdateStatus() {
     `<span class="ms-chip">PROG:${(b.program||[]).length}</span>`;
 }
 
-// ── Variables ────────────────────────────────────────────────────────────
+// ── Variables ─────────────────────────────────────────────────────────────
 function monUpdateVars() {
   const el = document.getElementById('mon-vars');
   if (!el) return;
@@ -3524,7 +3717,6 @@ function monUpdateVars() {
   const vars  = b.variables  || {};
   const strs  = b.stringVars || {};
   const arrs  = b.arrays     || {};
-
   const numKeys = Object.keys(vars).sort();
   const strKeys = Object.keys(strs).sort();
   const arrKeys = Object.keys(arrs).sort();
@@ -3533,40 +3725,35 @@ function monUpdateVars() {
     el.innerHTML = '<span class="mv-empty">No variables set</span>';
     return;
   }
-
   let html = '';
   for (const k of numKeys) {
     const fmt = fmtNum(vars[k]);
     const changed = _prevVarSnapshot[k] !== undefined && _prevVarSnapshot[k] !== fmt;
     html += `<div class="mv-row${changed ? ' mv-changed' : ''}">` +
-            `<span class="mv-name">${k}</span>` +
-            `<span class="mv-val">${fmt}</span></div>`;
+            `<span class="mv-name">${k}</span><span class="mv-val">${fmt}</span></div>`;
     _prevVarSnapshot[k] = fmt;
   }
   for (const k of strKeys) {
-    const v = String(strs[k]).slice(0, 20);
+    const v = String(strs[k]).slice(0, 20).replace(/&/g,'&amp;').replace(/</g,'&lt;');
     html += `<div class="mv-row"><span class="mv-name">${k}</span>` +
             `<span class="mv-val mv-str">"${v}"</span></div>`;
   }
   for (const k of arrKeys) {
     const n = Object.keys(arrs[k]).length;
     html += `<div class="mv-row"><span class="mv-name">${k}()</span>` +
-            `<span class="mv-val mv-arr">[${n}]</span></div>`;
+            `<span class="mv-val mv-arr">[${n} elem]</span></div>`;
   }
   el.innerHTML = html;
 }
 
-// ── Program listing ──────────────────────────────────────────────────────
+// ── Program listing ───────────────────────────────────────────────────────
 function monUpdateProgram() {
   const el = document.getElementById('mon-prog');
   if (!el) return;
   const b   = window.basic;
   const prog = b.program || [];
-  if (!prog.length) {
-    el.innerHTML = '<span class="mv-empty">No program loaded</span>';
-    return;
-  }
-  const curIdx = b.running ? b.lineIndex : -1;
+  if (!prog.length) { el.innerHTML = '<span class="mv-empty">No program loaded</span>'; return; }
+  const curIdx = (b.running || _dbgMode !== 'idle') ? b.lineIndex : -1;
   let html = '';
   for (let i = 0; i < prog.length; i++) {
     const { lineNum, src } = prog[i];
@@ -3575,26 +3762,21 @@ function monUpdateProgram() {
     const safe  = src.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const cls   = (isCur ? ' pl-cur' : '') + (isBp ? ' pl-bp' : '');
     html += `<div class="pl-row${cls}" onclick="monToggleBp(${lineNum})" title="Toggle breakpoint">` +
-            `<span class="pl-ln">${lineNum}</span>` +
-            `<span class="pl-src">${safe}</span></div>`;
+            `<span class="pl-ln">${lineNum}</span><span class="pl-src">${safe}</span></div>`;
   }
   el.innerHTML = html;
-  // Auto-scroll to current line
   if (curIdx >= 0) {
     const rows = el.querySelectorAll('.pl-row');
     if (rows[curIdx]) rows[curIdx].scrollIntoView({ block: 'nearest' });
   }
 }
 
-// ── Call stack ───────────────────────────────────────────────────────────
+// ── Call stack ────────────────────────────────────────────────────────────
 function monUpdateStack() {
   const el = document.getElementById('mon-stack');
   if (!el) return;
   const stack = (window.basic && window.basic.stack) || [];
-  if (!stack.length) {
-    el.innerHTML = '<span class="mv-empty">Empty</span>';
-    return;
-  }
+  if (!stack.length) { el.innerHTML = '<span class="mv-empty">Empty</span>'; return; }
   let html = '';
   const b = window.basic;
   for (let i = stack.length - 1; i >= 0; i--) {
@@ -3604,7 +3786,7 @@ function monUpdateStack() {
       html += `<div class="sk-row">FOR <b>${f.varName}</b>=${cur} TO ${fmtNum(f.end)} STEP ${fmtNum(f.step)}</div>`;
     } else if (f.type === 'GOSUB') {
       const retLine = (b.program[f.returnIdx] || {}).lineNum || '?';
-      html += `<div class="sk-row">GOSUB → ret @ ${retLine}</div>`;
+      html += `<div class="sk-row">GOSUB → ret @ <b>${retLine}</b></div>`;
     } else {
       html += `<div class="sk-row">${f.type}</div>`;
     }
@@ -3612,15 +3794,13 @@ function monUpdateStack() {
   el.innerHTML = html;
 }
 
-// ── RAM dump ─────────────────────────────────────────────────────────────
+// ── RAM dump ──────────────────────────────────────────────────────────────
 function monUpdateRAM() {
   const el = document.getElementById('mon-ram');
   if (!el) return;
   const b = window.basic;
   if (!b || !b.ram) { el.innerHTML = '<span class="mv-empty">No RAM</span>'; return; }
-
-  const COLS = 8, ROWS = 8;
-  const base = _ramViewBase & ~7;
+  const COLS = 8, ROWS = 8, base = _ramViewBase & ~7;
   let html = '';
   for (let row = 0; row < ROWS * COLS; row += COLS) {
     const addr = base + row;
@@ -3630,10 +3810,9 @@ function monUpdateRAM() {
     for (let c = 0; c < COLS; c++) {
       const a = addr + c;
       const v = a < b.ram.length ? b.ram[a] : 0;
-      const printable = v >= 0x20 && v < 0x7F;
       html += `<span class="hx-byte" title="${h4(a)}">${h2(v)}</span>`;
       if (c === 3) html += `<span class="hx-sep">·</span>`;
-      asc += printable ? String.fromCharCode(v) : '·';
+      asc += (v >= 0x20 && v < 0x7F) ? String.fromCharCode(v) : '·';
     }
     html += `<span class="hx-ascii">${asc}</span></div>`;
   }
@@ -3653,87 +3832,436 @@ function monToggleBp(lineNum) {
   monUpdateBpList();
   monUpdateProgram();
 }
-
 function monClearBps() {
   _dbgBreakLines.clear();
   monUpdateBpList();
   monUpdateProgram();
 }
-
 function monUpdateBpList() {
   const el = document.getElementById('mon-bps');
   if (!el) return;
   if (!_dbgBreakLines.size) {
-    el.innerHTML = '<span style="font-size:9px;color:#335">No breakpoints — click a line to set one</span>';
+    el.innerHTML = '<span style="font-size:9px;color:#335">No breakpoints — click a line number to set one</span>';
     return;
   }
-  let html = '';
-  for (const ln of [..._dbgBreakLines].sort((a,b)=>a-b))
-    html += `<span class="bp-chip" onclick="monToggleBp(${ln})" title="Remove">● ${ln} ✕</span>`;
-  el.innerHTML = html;
+  el.innerHTML = [..._dbgBreakLines].sort((a,b)=>a-b)
+    .map(ln => `<span class="bp-chip" onclick="monToggleBp(${ln})">● ${ln} ✕</span>`).join('');
 }
 
-// ── Step one BASIC line ──────────────────────────────────────────────────
+// ── STEP button ────────────────────────────────────────────────────────────
+// If idle: starts program in step mode (executes line 0 then pauses)
+// If paused: executes exactly one more line then pauses again
 function monStep() {
   const b = window.basic;
   if (!b || !b.program.length) { addOut('No program loaded.', true, 'sys'); return; }
-  if (b.running) return;
 
-  // Clamp lineIndex
-  if (b.lineIndex < 0 || b.lineIndex >= b.program.length) b.lineIndex = 0;
-  const line = b.program[b.lineIndex];
-  addOut(`STEP ${line.lineNum}: ${line.src}`, true, 'sys');
+  if (_dbgMode === 'idle') {
+    // Start fresh in step mode — set stepping so first onStep pauses after line 0
+    _dbgMode = 'stepping';
+    _updateDbgBtns();
+    b.run().then(() => {
+      _dbgMode = 'idle';
+      _stepResolve = null;
+      _updateDbgBtns();
+      dbgRefresh();
+    });
+    return;
+  }
 
-  b.running = true;
-  b._jumped = false;
-  b.executeLine(line.src).then(() => {
-    if (!b._jumped) b.lineIndex++;
-    b.running = false;
-    dbgRefresh();
-  }).catch(e => {
-    addOut(`Error: ${e.message}`, true, 'sys');
-    b.running = false;
-    dbgRefresh();
-  });
+  if (_dbgMode === 'paused' && _stepResolve) {
+    // Execute exactly one more line, then pause again
+    _dbgMode = 'stepping';
+    _updateDbgBtns();
+    const res = _stepResolve;
+    _stepResolve = null;
+    res(); // unblock onStep, which will pause again after next line
+  }
 }
 
-// ── Run until breakpoint (or stop) ───────────────────────────────────────
+// ── RUN / CONT button ──────────────────────────────────────────────────────
 function monRunTo() {
   const b = window.basic;
   if (!b || !b.program.length) { addOut('No program loaded.', true, 'sys'); return; }
-  if (b.running) return;
-  runProg();   // uses the normal run path, breakpoints checked in the interval below
+
+  if (_dbgMode === 'idle') {
+    // Start normally — onStep only pauses on breakpoints
+    _dbgMode = 'running';
+    _updateDbgBtns();
+    b.run().then(() => {
+      _dbgMode = 'idle';
+      _stepResolve = null;
+      _updateDbgBtns();
+      dbgRefresh();
+    });
+    return;
+  }
+
+  if (_dbgMode === 'paused' && _stepResolve) {
+    // Continue from breakpoint
+    _dbgMode = 'running';
+    _updateDbgBtns();
+    const res = _stepResolve;
+    _stepResolve = null;
+    res();
+  }
 }
 
-// ── Polling interval — hooked AFTER basic is created ─────────────────────
-function _startMonitorPolling() {
-  // Poll at 200 ms for live updates
-  setInterval(() => {
-    dbgRefresh();
-    // Breakpoint check
-    const b = window.basic;
-    if (b && b.running && b.program && b.program[b.lineIndex]) {
-      const ln = b.program[b.lineIndex].lineNum;
-      if (_dbgBreakLines.has(ln)) {
-        b.stop();
-        addOut(`⬛ Breakpoint @ line ${ln}`, true, 'sys');
-      }
-    }
-  }, 200);
+// ── STOP button ───────────────────────────────────────────────────────────
+function monStopDbg() {
+  const b = window.basic;
+  if (!b) return;
+  b.stop();
+  if (_stepResolve) { _stepResolve(); _stepResolve = null; }
+  _dbgMode = 'idle';
+  _updateDbgBtns();
+  addOut('Stopped.', true, 'sys');
+  dbgRefresh();
 }
 
-// Wait until basic exists (created in the other load handler)
+// ── Init ──────────────────────────────────────────────────────────────────
 function _waitForBasic() {
   if (window.basic) {
-    _startMonitorPolling();
+    _installHook();
     dbgRefresh();
     monUpdateBpList();
+    _updateDbgBtns();
+    // Passive refresh when idle
+    setInterval(() => { if (_dbgMode === 'idle') dbgRefresh(); }, 500);
   } else {
     setTimeout(_waitForBasic, 100);
   }
 }
-
 window.addEventListener('load', _waitForBasic);
+
+/* ════════════════════════════════════════════════════════════
+   SC61860 CPU MONITOR
+   — Independent CPU with its own 64KB flat RAM
+   — Disassembler, step/run/reset, breakpoints, memory editor
+════════════════════════════════════════════════════════════ */
+
+// ── Flat 64KB memory for the CPU ─────────────────────────────────────────
+const cpuMem = {
+  data: new Uint8Array(65536),
+  read(a)    { return this.data[a & 0xFFFF]; },
+  write(a,v) { this.data[a & 0xFFFF] = v & 0xFF; }
+};
+
+const cpuCore = new SC61860(cpuMem);
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function ch2(v) { return (v & 0xFF).toString(16).toUpperCase().padStart(2,'0'); }
+function ch4(v) { return (v & 0xFFFF).toString(16).toUpperCase().padStart(4,'0'); }
+
+// ── Tabs ──────────────────────────────────────────────────────────────────
+function cpuTabShow(name) {
+  ['regs','dasm','mem'].forEach(t => {
+    document.getElementById('tab-'+t).classList.toggle('active', t===name);
+    document.getElementById('tbd-'+t).classList.toggle('active', t===name);
+  });
+  if (name === 'dasm') cpuDisasmAt(cpuCore.PC);
+  if (name === 'mem')  cpuMemView();
+}
+
+// ── Register display ──────────────────────────────────────────────────────
+let _cpuPrevRegs = {};
+function cpuUpdateRegs() {
+  const set = (id, val, fmt) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const s = fmt(val);
+    el.classList.toggle('chg', _cpuPrevRegs[id] !== undefined && _cpuPrevRegs[id] !== s);
+    el.textContent = s;
+    _cpuPrevRegs[id] = s;
+  };
+  set('cr-A', cpuCore.A, ch2); set('cr-B', cpuCore.B, ch2);
+  set('cr-I', cpuCore.I, ch2); set('cr-J', cpuCore.J, ch2);
+  set('cr-K', cpuCore.K, ch2); set('cr-L', cpuCore.L, ch2);
+  set('cr-M', cpuCore.M, ch2); set('cr-N', cpuCore.N, ch2);
+  set('cr-P', cpuCore.P, ch2); set('cr-Q', cpuCore.Q, ch2);
+  set('cr-R', cpuCore.R, ch2); set('cr-H', cpuCore.H, ch2);
+  set('cr-PC', cpuCore.PC, ch4); set('cr-DP', cpuCore.DP, ch4);
+  set('cr-X',  cpuCore.X,  ch4); set('cr-Y',  cpuCore.Y,  ch4);
+  set('cr-CYC', cpuCore.cycles, v => v.toString());
+  document.getElementById('cf-C').classList.toggle('on', !!cpuCore.carry);
+  document.getElementById('cf-Z').classList.toggle('on', !!cpuCore.zero);
+  document.getElementById('cf-H').classList.toggle('on', !!cpuCore.halted);
+}
+
+// ── SC61860 Disassembler ──────────────────────────────────────────────────
+const _mnemonics = {
+  0x00:'LII', 0x01:'LIJ', 0x02:'LIA', 0x03:'LIB',
+  0x04:'IX',  0x05:'DX',  0x06:'IY',  0x07:'DY',
+  0x08:'MVW', 0x09:'EXW', 0x0A:'MVB', 0x0B:'EXB',
+  0x0C:'ADN', 0x0D:'SBN', 0x0E:'ADW', 0x0F:'SBW',
+  0x10:'LIDP',0x11:'LIDL',0x12:'LIP', 0x13:'LIQ',
+  0x14:'ADB', 0x15:'SBB',
+  0x18:'MVWD',0x19:'EXWD',0x1A:'MVBD',0x1B:'EXBD',
+  0x1C:'SRW', 0x1D:'SLW', 0x1E:'FILM',0x1F:'FILD',
+  0x20:'LDP', 0x21:'LDQ', 0x22:'LDR', 0x23:'CLRA',
+  0x24:'IXL', 0x25:'DXL', 0x26:'IYS', 0x27:'DYS',
+  0x28:'JRNZP',0x29:'JRNZM',0x2A:'JRNCM',0x2B:'JRNCM',
+  0x2C:'JRP', 0x2D:'JRM', 0x2F:'LOOP',
+  0x30:'STP', 0x31:'STQ', 0x32:'STR', 0x33:'STH',
+  0x34:'PUSH',0x35:'DATA',0x37:'RTN',
+  0x38:'JRZP',0x39:'JRZM',0x3A:'JRCP',0x3B:'JRCM',
+  0x40:'INCI',0x41:'DECI',0x42:'INCA',0x43:'DECA',
+  0x44:'ADM', 0x45:'SBM', 0x46:'ANMA',0x47:'ORMA',
+  0x48:'INCK',0x49:'DECK',0x4A:'INCM',0x4B:'DECM',
+  0x4C:'INA', 0x4D:'NOPW',0x4E:'WAIT',0x4F:'CUP',
+  0x50:'INCP',0x51:'DECP',
+  0x52:'STD', 0x53:'MVDM',0x55:'MVMD',0x57:'LDD',
+  0x58:'SWP', 0x59:'LDM', 0x5A:'SL',  0x5B:'POP',
+  0x5D:'OUTA',0x5F:'OUTF',
+  0x60:'ANIM',0x61:'ORIM',0x62:'TSIM',0x63:'CPIM',
+  0x64:'ANIA',0x65:'ORIA',0x66:'TSIA',0x67:'CPIA',
+  0x69:'DTC', 0x6B:'TEST',0x6F:'CDN',
+  0x70:'ADIM',0x71:'SBIM',0x74:'ADIA',0x75:'SBIA',
+  0x78:'CALL',0x79:'JP',  0x7A:'PTC', 0x7B:'HALT',
+  0x7C:'JPNZ',0x7D:'JPNC',0x7E:'JPZ', 0x7F:'JPC',
+  0xC0:'INCJ',0xC1:'DECJ',0xC2:'INCB',0xC3:'DECB',
+  0xC4:'ADCM',0xC5:'SBCM',0xC6:'TSMA',0xC7:'CPMA',
+  0xC8:'INCL',0xC9:'DECL',0xCA:'INCN',0xCB:'DECN',
+  0xCC:'NOP', 0xCE:'NOPT',
+  0xD0:'SC',  0xD1:'RC',  0xD2:'SR',
+  0xD4:'ANID',0xD5:'ORID',0xD6:'TSID',0xD7:'CPID',
+  0xD8:'LEAVE',0xDA:'EXAB',0xDB:'EXAM',
+  0xDD:'OUTB',0xDF:'OUTC',
+};
+const _imm1 = new Set([
+  0x00,0x01,0x02,0x03,0x11,0x12,0x13,
+  0x28,0x29,0x2A,0x2B,0x2C,0x2D,0x2F,
+  0x38,0x39,0x3A,0x3B,0x4E,
+  0x60,0x61,0x62,0x63,0x64,0x65,0x66,0x67,
+  0x6B,0x70,0x71,0x74,0x75,
+  0xD4,0xD5,0xD6,0xD7,
+]);
+const _addr16 = new Set([0x10,0x78,0x79,0x7C,0x7D,0x7E,0x7F]);
+
+function cpuDisasm1(addr) {
+  const rb = a => cpuMem.read(a & 0xFFFF);
+  const op = rb(addr);
+  if (op >= 0x80 && op <= 0xBF)
+    return { mnem:'LP', ops:`${ch2(op-0x80)}h`, size:1 };
+  if (op >= 0xE0 && op <= 0xFF) {
+    const lo = rb(addr+1);
+    return { mnem:'CAL', ops:ch4(((op&0x1F)<<8)|lo), size:2 };
+  }
+  const mnem = _mnemonics[op] || `DB`;
+  let ops='', size=1;
+  if (_imm1.has(op))   { ops=`#${ch2(rb(addr+1))}h`; size=2; }
+  else if (_addr16.has(op)) { ops=ch4((rb(addr+1)<<8)|rb(addr+2)); size=3; }
+  else if (op===0x7A)  { ops=`#${ch2(rb(addr+1))}h,${ch4((rb(addr+2)<<8)|rb(addr+3))}`; size=4; }
+  return { mnem, ops, size };
+}
+
+let _cpuBps = new Set();
+let _cpuDasmBase = 0;
+
+function cpuDisasmAt(startAddr) {
+  _cpuDasmBase = startAddr & 0xFFFF;
+  const el = document.getElementById('cpu-dasm');
+  if (!el) return;
+  let html='', addr=_cpuDasmBase;
+  for (let i=0; i<28; i++) {
+    const {mnem,ops,size} = cpuDisasm1(addr);
+    const isCur = addr===cpuCore.PC, isBp=_cpuBps.has(addr);
+    let byteStr='';
+    for (let b=0;b<Math.min(size,4);b++) byteStr+=ch2(cpuMem.read((addr+b)&0xFFFF))+' ';
+    const cls=(isCur?' cur':'')+(isBp?' bp':'');
+    const a=addr;
+    html+=`<div class="dl${cls}" onclick="cpuBpToggle(${a})" title="Click: toggle BP">` +
+          `<span class="da">${ch4(addr)}</span>` +
+          `<span class="db">${byteStr.trim()}</span>` +
+          `<span class="dm">${mnem}</span>` +
+          `<span class="do">${ops}</span></div>`;
+    addr=(addr+Math.max(size,1))&0xFFFF;
+  }
+  el.innerHTML=html;
+  const inp=document.getElementById('dasm-addr');
+  if (inp) inp.value=ch4(_cpuDasmBase);
+}
+
+function cpuBpToggle(addr) {
+  _cpuBps.has(addr)?_cpuBps.delete(addr):_cpuBps.add(addr);
+  cpuBpRender(); cpuDisasmAt(_cpuDasmBase);
+}
+function cpuBpClear() { _cpuBps.clear(); cpuBpRender(); cpuDisasmAt(_cpuDasmBase); }
+function cpuBpRender() {
+  const el=document.getElementById('cpu-bps'); if(!el) return;
+  if(!_cpuBps.size){el.innerHTML='<span style="font-size:9px;color:#224">No breakpoints</span>';return;}
+  el.innerHTML=[..._cpuBps].sort((a,b)=>a-b)
+    .map(a=>`<span class="bp-chip" onclick="cpuBpToggle(${a})">● ${ch4(a)} ✕</span>`).join('');
+}
+
+// ── Step / Run / Reset ────────────────────────────────────────────────────
+function cpuStep() {
+  if (cpuCore.halted) { addOut('CPU HALTED — use RST', true,'sys'); return; }
+  cpuCore.step();
+  cpuUpdateRegs();
+  cpuDisasmAt(cpuCore.PC);
+  cpuMemViewAt(document.getElementById('mem-view-addr')?._memBase || 0, false);
+}
+
+let _cpuRunning = false;
+let _cpuRunTick = null;
+
+function cpuRun() {
+  if (_cpuRunning) {
+    // Pause
+    _cpuRunning=false;
+    clearInterval(_cpuRunTick); _cpuRunTick=null;
+    document.getElementById('cpuRunBtn').textContent='RUN';
+    document.getElementById('cpuRunBtn').classList.remove('active');
+    cpuUpdateRegs(); cpuDisasmAt(cpuCore.PC);
+  } else {
+    if (cpuCore.halted) { addOut('CPU HALTED — use RST', true, 'sys'); return; }
+    _cpuRunning=true;
+    document.getElementById('cpuRunBtn').textContent='PAUSE';
+    document.getElementById('cpuRunBtn').classList.add('active');
+    _cpuRunTick = setInterval(() => {
+      for (let i=0;i<200;i++) {
+        cpuCore.step();
+        if (cpuCore.halted || _cpuBps.has(cpuCore.PC)) break;
+      }
+      cpuUpdateRegs();
+      if (cpuCore.halted) {
+        _cpuRunning=false; clearInterval(_cpuRunTick); _cpuRunTick=null;
+        document.getElementById('cpuRunBtn').textContent='RUN';
+        document.getElementById('cpuRunBtn').classList.remove('active');
+        addOut('CPU HALTED', true, 'sys');
+        cpuDisasmAt(cpuCore.PC);
+      } else if (_cpuBps.has(cpuCore.PC)) {
+        _cpuRunning=false; clearInterval(_cpuRunTick); _cpuRunTick=null;
+        document.getElementById('cpuRunBtn').textContent='RUN';
+        document.getElementById('cpuRunBtn').classList.remove('active');
+        addOut(`CPU breakpoint @ ${ch4(cpuCore.PC)}`, true, 'sys');
+        cpuDisasmAt(cpuCore.PC);
+      }
+    }, 40);
+  }
+}
+
+function cpuReset() {
+  if (_cpuRunning) { clearInterval(_cpuRunTick); _cpuRunning=false;
+    document.getElementById('cpuRunBtn').textContent='RUN';
+    document.getElementById('cpuRunBtn').classList.remove('active'); }
+  cpuCore.reset(); cpuUpdateRegs(); cpuDisasmAt(0);
+  addOut('CPU reset.', true, 'sys');
+}
+
+// ── Memory viewer ─────────────────────────────────────────────────────────
+let _memViewBase = 0;
+
+function cpuMemView() {
+  const v = parseInt(document.getElementById('mem-view-addr').value, 16);
+  _memViewBase = isNaN(v) ? 0 : v & 0xFFF0;
+  _cpuRenderMem();
+}
+function cpuMemViewAt(addr, updateInput=true) {
+  _memViewBase = addr & 0xFFF0;
+  if (updateInput) {
+    const inp = document.getElementById('mem-view-addr');
+    if (inp) inp.value = ch4(_memViewBase);
+  }
+  _cpuRenderMem();
+}
+function _cpuRenderMem() {
+  const el = document.getElementById('cpu-mem'); if (!el) return;
+  const COLS=8, ROWS=10, base=_memViewBase;
+  let html='';
+  for (let row=0;row<ROWS*COLS;row+=COLS) {
+    const addr=base+row;
+    html+=`<div class="hexdump-row"><span class="hx-addr">${ch4(addr)}</span>`;
+    let asc='';
+    for (let c=0;c<COLS;c++) {
+      const a=addr+c, v=cpuMem.read(a);
+      const isCur=a===cpuCore.PC, isDP=a===cpuCore.DP, isBp=_cpuBps.has(a);
+      const cls=(isCur?' hi':'')+(isDP&&!isCur?' hx-dp':'')+(isBp?' bp':'');
+      html+=`<span class="hx-byte${cls}" title="${ch4(a)}" onclick="cpuBpToggle(${a})">${ch2(v)}</span>`;
+      if (c===3) html+=`<span class="hx-sep">·</span>`;
+      asc+=(v>=0x20&&v<0x7F)?String.fromCharCode(v):'·';
+    }
+    html+=`<span class="hx-ascii">${asc}</span></div>`;
+  }
+  el.innerHTML=html;
+}
+
+// ── Memory loader ─────────────────────────────────────────────────────────
+// Accepts: "0100 02 05 03 ..." or Intel HEX (:LLAAAARR...) or raw hex pairs
+function cpuLoadHex() {
+  const raw = document.getElementById('cpu-load-input').value.trim();
+  const addrIn = document.getElementById('cpu-load-addr').value.trim();
+
+  if (!raw) { addOut('Nothing to load.', true,'sys'); return; }
+
+  // Detect Intel HEX
+  if (raw.startsWith(':')) {
+    let count=0;
+    for (const line of raw.split(/\r?\n/)) {
+      const l=line.trim();
+      if (!l.startsWith(':')) continue;
+      const type=parseInt(l.substr(7,2),16);
+      if (type===1) break; // EOF
+      if (type===0) {
+        const byteCount=parseInt(l.substr(1,2),16);
+        const addr=parseInt(l.substr(3,4),16);
+        for (let i=0;i<byteCount;i++) {
+          cpuMem.write(addr+i, parseInt(l.substr(9+i*2,2),16));
+          count++;
+        }
+      }
+    }
+    addOut(`Loaded ${count} bytes (Intel HEX).`, true,'sys');
+    cpuMemViewAt(0); cpuDisasmAt(0); return;
+  }
+
+  // Plain hex: optional base address then byte pairs
+  const tokens = raw.replace(/[^0-9a-fA-F\s]/g,'').trim().split(/\s+/).filter(Boolean);
+  let base = parseInt(addrIn, 16);
+  if (isNaN(base)) base = 0;
+  let count=0;
+  for (const tok of tokens) {
+    if (tok.length === 4 && count===0) { base=parseInt(tok,16); continue; }
+    if (tok.length!==2) {
+      // skip non-byte tokens
+      if (tok.length>2) { base=parseInt(tok,16); continue; }
+      continue;
+    }
+    cpuMem.write(base+count, parseInt(tok,16));
+    count++;
+  }
+  document.getElementById('cpu-load-addr').value = ch4(base);
+  addOut(`Loaded ${count} bytes at ${ch4(base)}.`, true,'sys');
+  cpuMemViewAt(base); cpuDisasmAt(base);
+}
+
+// ── Fill all memory to 00 ─────────────────────────────────────────────────
+function cpuMemFill() {
+  cpuMem.data.fill(0); cpuCore.reset();
+  addOut('CPU memory cleared + CPU reset.', true,'sys');
+  cpuUpdateRegs(); _cpuRenderMem(); cpuDisasmAt(0);
+}
+
+// ── Dump current view window as hex string ────────────────────────────────
+function cpuMemDumpHex() {
+  let s=ch4(_memViewBase)+'\n';
+  for (let i=0;i<128;i++) {
+    s+=ch2(cpuMem.read((_memViewBase+i)&0xFFFF));
+    s+=(i%8===7)?'\n':' ';
+  }
+  return s.trim();
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    cpuUpdateRegs();
+    cpuDisasmAt(0);
+    cpuBpRender();
+    _cpuRenderMem();
+  }, 400);
+});
+
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
