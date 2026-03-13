@@ -526,40 +526,6 @@ footer a:hover{color:#8bac0f}
 .cpu-input:focus { border-color: #00b4ff; }
 .cpu-input::placeholder { color: rgba(0,180,255,.3); }
 
-/* Status bar */
-.mon-status { display:flex; flex-wrap:wrap; gap:4px; padding:6px 8px 8px; }
-.ms-chip { background:#0d1a24; border:1px solid rgba(0,180,255,.12); border-radius:4px;
-           padding:2px 7px; font-size:9px; color:#336688; }
-.ms-chip.ms-run { background:rgba(80,255,120,.08); border-color:rgba(80,255,120,.3); color:#50ff78; }
-.ms-chip.ms-line { color:#ffcc00; border-color:rgba(255,204,0,.3); }
-
-/* Variables */
-.mon-vars { padding:4px 8px 8px; max-height:180px; overflow-y:auto; }
-.mv-row { display:flex; justify-content:space-between; padding:2px 4px;
-          border-radius:3px; font-size:11px; }
-.mv-row.mv-changed { background:rgba(255,204,0,.08); }
-.mv-name { color:#00b4ff; min-width:30px; }
-.mv-val  { color:#e0f4ff; text-align:right; }
-.mv-val.mv-str { color:#a0e8b0; }
-.mv-val.mv-arr { color:#b0a0e8; }
-.mv-empty { font-size:9px; color:#335; padding:4px 4px; display:block; }
-
-/* Program listing */
-.mon-prog { padding:4px 6px 6px; max-height:200px; overflow-y:auto; }
-.pl-row { display:flex; gap:8px; padding:2px 4px; border-radius:3px;
-          cursor:pointer; font-size:10.5px; }
-.pl-row:hover { background:rgba(0,180,255,.06); }
-.pl-row.pl-cur { background:rgba(0,180,255,.14); border-left:2px solid #00b4ff; padding-left:2px; }
-.pl-row.pl-bp  { border-left:2px solid #ff6060; padding-left:2px; background:rgba(255,60,60,.06); }
-.pl-row.pl-cur.pl-bp { border-left:2px solid #ff9900; background:rgba(255,140,0,.12); }
-.pl-ln  { color:#336688; min-width:32px; }
-.pl-src { color:#b0c8e0; }
-
-/* Call stack */
-.mon-stack { padding:4px 8px 8px; max-height:100px; overflow-y:auto; }
-.sk-row { font-size:10px; color:#7ab8d4; padding:2px 0; border-bottom:1px solid rgba(0,180,255,.05); }
-.sk-row b { color:#ffcc00; }
-
 /* Collapsed state */
 .cpu-panel .cpu-body { display: block; }
 .cpu-panel.collapsed .cpu-body { display: none; }
@@ -825,72 +791,96 @@ footer a:hover{color:#8bac0f}
 <!-- ═══════════ CPU MONITOR ═══════════ -->
 <div class="cpu-monitor" id="cpuMonitor">
 
-  <!-- STATUS + CONTROLS -->
+  <!-- CONTROLS -->
   <div class="cpu-panel">
     <div class="cpu-hdr">
-      <div class="cpu-hdr-title">BASIC DEBUGGER</div>
+      <div class="cpu-hdr-title">SC61860 CPU MONITOR</div>
       <div class="cpu-hdr-btns">
-        <button class="cpu-btn go"     onclick="monStep()"    title="Step one BASIC line">STEP</button>
-        <button class="cpu-btn go"     onclick="monRunTo()"   title="Run to next breakpoint">RUN</button>
-        <button class="cpu-btn danger" onclick="stopProg()"   title="Stop execution">STOP</button>
+        <button class="cpu-btn go"    id="dbgStep"  onclick="dbgStep()"  title="Step one instruction">STEP</button>
+        <button class="cpu-btn go"    id="dbgRun"   onclick="dbgRun()"   title="Run / pause CPU">RUN</button>
+        <button class="cpu-btn danger" id="dbgReset" onclick="dbgReset()" title="Reset CPU">RST</button>
+      </div>
+    </div>
+    <!-- 8-bit registers -->
+    <div class="regs-grid" id="regsGrid">
+      <div class="reg-cell"><div class="reg-name">A</div><div class="reg-val" id="r-A">00</div></div>
+      <div class="reg-cell"><div class="reg-name">B</div><div class="reg-val" id="r-B">00</div></div>
+      <div class="reg-cell"><div class="reg-name">I</div><div class="reg-val" id="r-I">00</div></div>
+      <div class="reg-cell"><div class="reg-name">J</div><div class="reg-val" id="r-J">00</div></div>
+      <div class="reg-cell"><div class="reg-name">K</div><div class="reg-val" id="r-K">00</div></div>
+      <div class="reg-cell"><div class="reg-name">L</div><div class="reg-val" id="r-L">00</div></div>
+      <div class="reg-cell"><div class="reg-name">M</div><div class="reg-val" id="r-M">00</div></div>
+      <div class="reg-cell"><div class="reg-name">N</div><div class="reg-val" id="r-N">00</div></div>
+      <div class="reg-cell"><div class="reg-name">P</div><div class="reg-val" id="r-P">00</div></div>
+      <div class="reg-cell"><div class="reg-name">Q</div><div class="reg-val" id="r-Q">00</div></div>
+      <div class="reg-cell"><div class="reg-name">R</div><div class="reg-val" id="r-R">5B</div></div>
+      <div class="reg-cell"><div class="reg-name">H</div><div class="reg-val" id="r-H">00</div></div>
+    </div>
+    <!-- 16-bit registers -->
+    <div class="regs-wide">
+      <div class="reg-cell-wide"><div class="reg-name">PC</div><div class="reg-val" id="r-PC">0000</div></div>
+      <div class="reg-cell-wide"><div class="reg-name">DP</div><div class="reg-val" id="r-DP">0000</div></div>
+      <div class="reg-cell-wide"><div class="reg-name">X</div><div class="reg-val"  id="r-X">0000</div></div>
+      <div class="reg-cell-wide"><div class="reg-name">Y</div><div class="reg-val"  id="r-Y">0000</div></div>
+    </div>
+    <!-- Flags + cycles -->
+    <div class="flags-row">
+      <span class="flag-chip" id="f-C">C</span>
+      <span class="flag-chip" id="f-Z">Z</span>
+      <span class="flag-chip" id="f-H">HALT</span>
+      <div class="cycles-disp">CYCLES&nbsp;<span id="r-CYC">0</span></div>
+    </div>
+  </div>
+
+  <!-- DISASSEMBLER -->
+  <div class="cpu-panel">
+    <div class="cpu-hdr">
+      <div class="cpu-hdr-title">DISASSEMBLER</div>
+      <div class="cpu-hdr-btns">
+        <button class="cpu-btn" onclick="dbgDisasmAt(cpu.PC)" title="Go to PC">@PC</button>
+        <button class="cpu-btn" onclick="dbgToggleBp(cpu.PC)" title="Toggle breakpoint at PC">BP</button>
+        <button class="cpu-btn" onclick="dbgClearBps()" title="Clear all breakpoints">CLR</button>
       </div>
     </div>
     <div class="cpu-body">
-      <div class="mon-status" id="mon-status"></div>
+      <div class="disasm" id="disasmView"></div>
+      <div class="cpu-input-row">
+        <input class="cpu-input" id="dasmAddr" placeholder="addr (hex)" maxlength="6"
+               onkeydown="if(event.key==='Enter'){dbgDisasmAt(parseInt(this.value,16)||0)}">
+        <button class="cpu-btn" onclick="dbgDisasmAt(parseInt(document.getElementById('dasmAddr').value,16)||0)">GO</button>
+      </div>
+      <div class="bp-list" id="bpList"></div>
     </div>
   </div>
 
-  <!-- VARIABLES -->
+  <!-- iRAM HEX DUMP -->
   <div class="cpu-panel">
     <div class="cpu-hdr">
-      <div class="cpu-hdr-title">VARIABLES</div>
+      <div class="cpu-hdr-title">INTERNAL RAM (96 bytes)</div>
       <div class="cpu-hdr-btns">
-        <button class="cpu-btn" onclick="dbgRefresh()">↻</button>
+        <button class="cpu-btn" onclick="dbgRefresh()" title="Refresh">↻</button>
+        <button class="cpu-btn" onclick="dbgFillZero()" title="Zero iRAM">CLR</button>
       </div>
     </div>
     <div class="cpu-body">
-      <div class="mon-vars" id="mon-vars"></div>
+      <div class="hexdump" id="iramDump"></div>
     </div>
   </div>
 
-  <!-- PROGRAM LISTING -->
+  <!-- EXT MEMORY VIEWER -->
   <div class="cpu-panel">
     <div class="cpu-hdr">
-      <div class="cpu-hdr-title">PROGRAM LISTING</div>
+      <div class="cpu-hdr-title">MEMORY VIEWER</div>
       <div class="cpu-hdr-btns">
-        <button class="cpu-btn danger" onclick="monClearBps()">CLR BP</button>
-      </div>
-    </div>
-    <div class="cpu-body">
-      <div class="mon-prog" id="mon-prog"></div>
-      <div class="bp-list"  id="mon-bps"></div>
-    </div>
-  </div>
-
-  <!-- CALL STACK -->
-  <div class="cpu-panel">
-    <div class="cpu-hdr">
-      <div class="cpu-hdr-title">CALL STACK</div>
-    </div>
-    <div class="cpu-body">
-      <div class="mon-stack" id="mon-stack"></div>
-    </div>
-  </div>
-
-  <!-- BASIC RAM DUMP -->
-  <div class="cpu-panel">
-    <div class="cpu-hdr">
-      <div class="cpu-hdr-title">RAM DUMP</div>
-      <div class="cpu-hdr-btns">
-        <button class="cpu-btn" onclick="monRamGo()">GO</button>
+        <button class="cpu-btn" onclick="dbgMemGo()" title="Go to address">GO</button>
       </div>
     </div>
     <div class="cpu-body">
       <div class="cpu-input-row">
-        <input class="cpu-input" id="mon-ram-addr" placeholder="offset (hex)" maxlength="6"
-               onkeydown="if(event.key==='Enter') monRamGo()">
+        <input class="cpu-input" id="memAddr" placeholder="address (hex)" maxlength="6"
+               onkeydown="if(event.key==='Enter') dbgMemGo()">
       </div>
-      <div class="hexdump" id="mon-ram"></div>
+      <div class="hexdump" id="memDump"></div>
     </div>
   </div>
 
@@ -3460,280 +3450,377 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
-
-
 /* ════════════════════════════════════════════════════════════
-   BASIC DEBUGGER — live monitor for the BASIC interpreter
+   CPU MONITOR — SC61860 debugger
 ════════════════════════════════════════════════════════════ */
 
-function h2(v) { return (v & 0xFF).toString(16).toUpperCase().padStart(2,'0'); }
-function h4(v) { return (v & 0xFFFF).toString(16).toUpperCase().padStart(4,'0'); }
+// Minimal memory interface for the CPU (64KB flat RAM for debugging)
+const cpuMem = {
+  data: new Uint8Array(65536),
+  read(addr)      { return this.data[addr & 0xFFFF]; },
+  write(addr, v)  { this.data[addr & 0xFFFF] = v & 0xFF; }
+};
 
-let _dbgBreakLines = new Set();
-let _prevVarSnapshot = {};
-let _ramViewBase = 0;
-let _dbgRunInterval = null;
+const cpu = new SC61860(cpuMem);
 
-// ── Format a BASIC number ────────────────────────────────────────────────
-function fmtNum(n) {
-  if (n === undefined || n === null) return '0';
-  if (!isFinite(n)) return (n > 0) ? '1E+99' : '-1E+99';
-  if (n === 0) return '0';
-  const abs = Math.abs(n);
-  if (abs >= 1e10 || (abs > 0 && abs < 1e-4))
-    return n.toExponential(4).toUpperCase();
-  return parseFloat(n.toPrecision(10)).toString();
-}
+let dbgRunning   = false;
+let dbgRunTimer  = null;
+let dbgBreakpoints = new Set();
+let dbgPrevRegs  = {};
+let dbgDisasmBase = 0;
+let dbgAutoRefresh = true;
 
-// ── Master refresh ───────────────────────────────────────────────────────
-function dbgRefresh() {
-  if (!window.basic) return;
-  monUpdateStatus();
-  monUpdateVars();
-  monUpdateProgram();
-  monUpdateStack();
-  monUpdateRAM();
-}
+// ── SC61860 disassembler ──────────────────────────────────────────────────
+const MNEMONICS = {
+  0x00:'LII',  0x01:'LIJ',  0x02:'LIA',  0x03:'LIB',
+  0x04:'IX',   0x05:'DX',   0x06:'IY',   0x07:'DY',
+  0x08:'MVW',  0x09:'EXW',  0x0A:'MVB',  0x0B:'EXB',
+  0x0C:'ADN',  0x0D:'SBN',  0x0E:'ADW',  0x0F:'SBW',
+  0x10:'LIDP', 0x11:'LIDL', 0x12:'LIP',  0x13:'LIQ',
+  0x14:'ADB',  0x15:'SBB',
+  0x18:'MVWD', 0x19:'EXWD', 0x1A:'MVBD', 0x1B:'EXBD',
+  0x1C:'SRW',  0x1D:'SLW',  0x1E:'FILM', 0x1F:'FILD',
+  0x20:'LDP',  0x21:'LDQ',  0x22:'LDR',  0x23:'CLRA',
+  0x24:'IXL',  0x25:'DXL',  0x26:'IYS',  0x27:'DYS',
+  0x28:'JRNZP',0x29:'JRNZM',0x2A:'JRNCM',0x2B:'JRNCM',
+  0x2C:'JRP',  0x2D:'JRM',  0x2F:'LOOP',
+  0x30:'STP',  0x31:'STQ',  0x32:'STR',  0x33:'STH',
+  0x34:'PUSH', 0x35:'DATA', 0x37:'RTN',
+  0x38:'JRZP', 0x39:'JRZM', 0x3A:'JRCP', 0x3B:'JRCM',
+  0x40:'INCI', 0x41:'DECI', 0x42:'INCA', 0x43:'DECA',
+  0x44:'ADM',  0x45:'SBM',  0x46:'ANMA', 0x47:'ORMA',
+  0x48:'INCK', 0x49:'DECK', 0x4A:'INCM', 0x4B:'DECM',
+  0x4C:'INA',  0x4D:'NOPW', 0x4E:'WAIT', 0x4F:'CUP',
+  0x50:'INCP', 0x51:'DECP',
+  0x52:'STD',  0x53:'MVDM', 0x55:'MVMD', 0x57:'LDD',
+  0x58:'SWP',  0x59:'LDM',  0x5A:'SL',   0x5B:'POP',
+  0x5D:'OUTA', 0x5F:'OUTF',
+  0x60:'ANIM', 0x61:'ORIM', 0x62:'TSIM', 0x63:'CPIM',
+  0x64:'ANIA', 0x65:'ORIA', 0x66:'TSIA', 0x67:'CPIA',
+  0x69:'DTC',  0x6B:'TEST', 0x6F:'CDN',
+  0x70:'ADIM', 0x71:'SBIM', 0x74:'ADIA', 0x75:'SBIA',
+  0x78:'CALL', 0x79:'JP',   0x7A:'PTC',  0x7B:'HALT',
+  0x7C:'JPNZ', 0x7D:'JPNC', 0x7E:'JPZ',  0x7F:'JPC',
+  0xC0:'INCJ', 0xC1:'DECJ', 0xC2:'INCB', 0xC3:'DECB',
+  0xC4:'ADCM', 0xC5:'SBCM', 0xC6:'TSMA', 0xC7:'CPMA',
+  0xC8:'INCL', 0xC9:'DECL', 0xCA:'INCN', 0xCB:'DECN',
+  0xCC:'NOP',  0xCE:'NOPT',
+  0xD0:'SC',   0xD1:'RC',   0xD2:'SR',
+  0xD4:'ANID', 0xD5:'ORID', 0xD6:'TSID', 0xD7:'CPID',
+  0xD8:'LEAVE',0xDA:'EXAB', 0xDB:'EXAM',
+  0xDD:'OUTB', 0xDF:'OUTC',
+};
 
-// ── Status bar ───────────────────────────────────────────────────────────
-function monUpdateStatus() {
-  const el = document.getElementById('mon-status');
-  if (!el) return;
-  const b = window.basic;
-  const running = b.running;
-  const mode    = b.mode || 'CAL';
-  const angle   = b.angleMode || 'DEG';
-  let curLine   = '—';
-  if (running && b.program && b.lineIndex >= 0 && b.lineIndex < b.program.length)
-    curLine = b.program[b.lineIndex].lineNum;
+// Returns {mnemonic, operand, size} for opcode at addr
+function disassemble(addr) {
+  const r = (a) => cpuMem.read(a & 0xFFFF);
+  const op = r(addr);
+  let mnem = '', ops = '', size = 1;
 
-  el.innerHTML =
-    `<span class="ms-chip ${running ? 'ms-run' : ''}">${running ? '▶ RUN' : '■ IDLE'}</span>` +
-    `<span class="ms-chip">${mode}</span>` +
-    `<span class="ms-chip">${angle}</span>` +
-    (running ? `<span class="ms-chip ms-line">LINE&nbsp;${curLine}</span>` : '') +
-    `<span class="ms-chip">STACK:${(b.stack||[]).length}</span>` +
-    `<span class="ms-chip">PROG:${(b.program||[]).length}</span>`;
-}
-
-// ── Variables ────────────────────────────────────────────────────────────
-function monUpdateVars() {
-  const el = document.getElementById('mon-vars');
-  if (!el) return;
-  const b = window.basic;
-  const vars  = b.variables  || {};
-  const strs  = b.stringVars || {};
-  const arrs  = b.arrays     || {};
-
-  const numKeys = Object.keys(vars).sort();
-  const strKeys = Object.keys(strs).sort();
-  const arrKeys = Object.keys(arrs).sort();
-
-  if (!numKeys.length && !strKeys.length && !arrKeys.length) {
-    el.innerHTML = '<span class="mv-empty">No variables set</span>';
-    return;
+  // LP n (0x80..0xBF)
+  if (op >= 0x80 && op <= 0xBF) {
+    return { mnem: 'LP', ops: `${(op-0x80).toString(16).toUpperCase().padStart(2,'0')}h`, size: 1 };
+  }
+  // CAL short (0xE0..0xFF)
+  if (op >= 0xE0 && op <= 0xFF) {
+    const lo = r(addr+1);
+    const target = ((op & 0x1F) << 8) | lo;
+    return { mnem: 'CAL', ops: h4(target), size: 2 };
   }
 
+  mnem = MNEMONICS[op] || `?${h2(op)}`;
+  switch(op) {
+    // 2-byte: op + immediate byte
+    case 0x00: case 0x01: case 0x02: case 0x03:
+    case 0x11: case 0x12: case 0x13:
+    case 0x28: case 0x29: case 0x2A: case 0x2B:
+    case 0x2C: case 0x2D: case 0x2F:
+    case 0x38: case 0x39: case 0x3A: case 0x3B:
+    case 0x4E: case 0x60: case 0x61: case 0x62: case 0x63:
+    case 0x64: case 0x65: case 0x66: case 0x67:
+    case 0x6B: case 0x70: case 0x71: case 0x74: case 0x75:
+    case 0xD4: case 0xD5: case 0xD6: case 0xD7:
+      ops = `#${h2(r(addr+1))}`; size = 2; break;
+
+    // 3-byte: op + 16-bit address
+    case 0x10: case 0x78: case 0x79:
+    case 0x7A: // PTC: op + k + addr (3 bytes)
+    case 0x7C: case 0x7D: case 0x7E: case 0x7F:
+      ops = h4((r(addr+1)<<8)|r(addr+2)); size = 3; break;
+
+    case 0x7A: // PTC k, addr
+      ops = `#${h2(r(addr+1))}, ${h4((r(addr+2)<<8)|r(addr+3))}`; size = 4; break;
+
+    default: ops = ''; size = 1;
+  }
+  return { mnem, ops, size };
+}
+
+function h2(v) { return (v&0xFF).toString(16).toUpperCase().padStart(2,'0'); }
+function h4(v) { return (v&0xFFFF).toString(16).toUpperCase().padStart(4,'0'); }
+
+// ── Render registers ─────────────────────────────────────────────────────
+function dbgUpdateRegs() {
+  const set = (id, val, fmt) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const s = fmt(val);
+    const changed = dbgPrevRegs[id] !== undefined && dbgPrevRegs[id] !== s;
+    el.textContent = s;
+    el.classList.toggle('changed', changed);
+    dbgPrevRegs[id] = s;
+  };
+  set('r-A', cpu.A,  h2); set('r-B', cpu.B,  h2);
+  set('r-I', cpu.I,  h2); set('r-J', cpu.J,  h2);
+  set('r-K', cpu.K,  h2); set('r-L', cpu.L,  h2);
+  set('r-M', cpu.M,  h2); set('r-N', cpu.N,  h2);
+  set('r-P', cpu.P,  h2); set('r-Q', cpu.Q,  h2);
+  set('r-R', cpu.R,  h2); set('r-H', cpu.H,  h2);
+  set('r-PC', cpu.PC, h4); set('r-DP', cpu.DP, h4);
+  set('r-X',  cpu.X,  h4); set('r-Y',  cpu.Y,  h4);
+  set('r-CYC', cpu.cycles, v => v.toString());
+  document.getElementById('f-C').classList.toggle('on', !!cpu.carry);
+  document.getElementById('f-Z').classList.toggle('on', !!cpu.zero);
+  document.getElementById('f-H').classList.toggle('on', !!cpu.halted);
+}
+
+// ── iRAM hex dump ─────────────────────────────────────────────────────────
+function dbgUpdateIram() {
+  const el = document.getElementById('iramDump');
+  if (!el) return;
+  const COLS = 8;
   let html = '';
-  for (const k of numKeys) {
-    const fmt = fmtNum(vars[k]);
-    const changed = _prevVarSnapshot[k] !== undefined && _prevVarSnapshot[k] !== fmt;
-    html += `<div class="mv-row${changed ? ' mv-changed' : ''}">` +
-            `<span class="mv-name">${k}</span>` +
-            `<span class="mv-val">${fmt}</span></div>`;
-    _prevVarSnapshot[k] = fmt;
-  }
-  for (const k of strKeys) {
-    const v = String(strs[k]).slice(0, 20);
-    html += `<div class="mv-row"><span class="mv-name">${k}</span>` +
-            `<span class="mv-val mv-str">"${v}"</span></div>`;
-  }
-  for (const k of arrKeys) {
-    const n = Object.keys(arrs[k]).length;
-    html += `<div class="mv-row"><span class="mv-name">${k}()</span>` +
-            `<span class="mv-val mv-arr">[${n}]</span></div>`;
-  }
-  el.innerHTML = html;
-}
-
-// ── Program listing ──────────────────────────────────────────────────────
-function monUpdateProgram() {
-  const el = document.getElementById('mon-prog');
-  if (!el) return;
-  const b   = window.basic;
-  const prog = b.program || [];
-  if (!prog.length) {
-    el.innerHTML = '<span class="mv-empty">No program loaded</span>';
-    return;
-  }
-  const curIdx = b.running ? b.lineIndex : -1;
-  let html = '';
-  for (let i = 0; i < prog.length; i++) {
-    const { lineNum, src } = prog[i];
-    const isCur = i === curIdx;
-    const isBp  = _dbgBreakLines.has(lineNum);
-    const safe  = src.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    const cls   = (isCur ? ' pl-cur' : '') + (isBp ? ' pl-bp' : '');
-    html += `<div class="pl-row${cls}" onclick="monToggleBp(${lineNum})" title="Toggle breakpoint">` +
-            `<span class="pl-ln">${lineNum}</span>` +
-            `<span class="pl-src">${safe}</span></div>`;
-  }
-  el.innerHTML = html;
-  // Auto-scroll to current line
-  if (curIdx >= 0) {
-    const rows = el.querySelectorAll('.pl-row');
-    if (rows[curIdx]) rows[curIdx].scrollIntoView({ block: 'nearest' });
-  }
-}
-
-// ── Call stack ───────────────────────────────────────────────────────────
-function monUpdateStack() {
-  const el = document.getElementById('mon-stack');
-  if (!el) return;
-  const stack = (window.basic && window.basic.stack) || [];
-  if (!stack.length) {
-    el.innerHTML = '<span class="mv-empty">Empty</span>';
-    return;
-  }
-  let html = '';
-  const b = window.basic;
-  for (let i = stack.length - 1; i >= 0; i--) {
-    const f = stack[i];
-    if (f.type === 'FOR') {
-      const cur = fmtNum((b.variables || {})[f.varName]);
-      html += `<div class="sk-row">FOR <b>${f.varName}</b>=${cur} TO ${fmtNum(f.end)} STEP ${fmtNum(f.step)}</div>`;
-    } else if (f.type === 'GOSUB') {
-      const retLine = (b.program[f.returnIdx] || {}).lineNum || '?';
-      html += `<div class="sk-row">GOSUB → ret @ ${retLine}</div>`;
-    } else {
-      html += `<div class="sk-row">${f.type}</div>`;
+  for (let row = 0; row < 96; row += COLS) {
+    html += `<div class="hexdump-row"><span class="hx-addr">${h2(row)}</span>`;
+    let asc = '';
+    for (let c = 0; c < COLS && row+c < 96; c++) {
+      const addr = row + c;
+      const v = cpu.iram[addr];
+      const isP = addr === cpu.P;
+      const cls = isP ? ' hi' : '';
+      html += `<span class="hx-byte${cls}" title="iRAM[${h2(addr)}]" onclick="dbgEditIram(${addr})">${h2(v)}</span>`;
+      if (c === 3) html += `<span class="hx-sep">·</span>`;
+      asc += (v >= 0x20 && v < 0x7F) ? String.fromCharCode(v) : '·';
     }
+    html += `<span class="hx-ascii">${asc}</span></div>`;
   }
   el.innerHTML = html;
 }
 
-// ── RAM dump ─────────────────────────────────────────────────────────────
-function monUpdateRAM() {
-  const el = document.getElementById('mon-ram');
+// ── Memory viewer ─────────────────────────────────────────────────────────
+function dbgUpdateMem(base) {
+  const el = document.getElementById('memDump');
   if (!el) return;
-  const b = window.basic;
-  if (!b || !b.ram) { el.innerHTML = '<span class="mv-empty">No RAM</span>'; return; }
-
   const COLS = 8, ROWS = 8;
-  const base = _ramViewBase & ~7;
+  base = (base || 0) & 0xFFF0;
   let html = '';
-  for (let row = 0; row < ROWS * COLS; row += COLS) {
+  for (let row = 0; row < ROWS*COLS; row += COLS) {
     const addr = base + row;
-    if (addr >= b.ram.length) break;
     html += `<div class="hexdump-row"><span class="hx-addr">${h4(addr)}</span>`;
     let asc = '';
     for (let c = 0; c < COLS; c++) {
       const a = addr + c;
-      const v = a < b.ram.length ? b.ram[a] : 0;
-      const printable = v >= 0x20 && v < 0x7F;
-      html += `<span class="hx-byte" title="${h4(a)}">${h2(v)}</span>`;
+      const v = cpuMem.read(a);
+      const isBp = dbgBreakpoints.has(a);
+      const isPC = a === cpu.PC;
+      const cls = (isPC ? ' hi' : '') + (isBp ? ' bp' : '');
+      html += `<span class="hx-byte${cls}" title="${h4(a)}" onclick="dbgToggleBp(${a})">${h2(v)}</span>`;
       if (c === 3) html += `<span class="hx-sep">·</span>`;
-      asc += printable ? String.fromCharCode(v) : '·';
+      asc += (v >= 0x20 && v < 0x7F) ? String.fromCharCode(v) : '·';
     }
     html += `<span class="hx-ascii">${asc}</span></div>`;
   }
-  el.innerHTML = html || '<span class="mv-empty">Empty</span>';
+  el.innerHTML = html;
+  el._base = base;
 }
 
-function monRamGo() {
-  const v = parseInt(document.getElementById('mon-ram-addr').value, 16);
-  _ramViewBase = isNaN(v) ? 0 : v;
-  monUpdateRAM();
-}
-
-// ── Breakpoints ───────────────────────────────────────────────────────────
-function monToggleBp(lineNum) {
-  if (_dbgBreakLines.has(lineNum)) _dbgBreakLines.delete(lineNum);
-  else _dbgBreakLines.add(lineNum);
-  monUpdateBpList();
-  monUpdateProgram();
-}
-
-function monClearBps() {
-  _dbgBreakLines.clear();
-  monUpdateBpList();
-  monUpdateProgram();
-}
-
-function monUpdateBpList() {
-  const el = document.getElementById('mon-bps');
+// ── Disassembler view ─────────────────────────────────────────────────────
+function dbgDisasmAt(startAddr) {
+  dbgDisasmBase = startAddr & 0xFFFF;
+  const el = document.getElementById('disasmView');
   if (!el) return;
-  if (!_dbgBreakLines.size) {
-    el.innerHTML = '<span style="font-size:9px;color:#335">No breakpoints — click a line to set one</span>';
-    return;
-  }
   let html = '';
-  for (const ln of [..._dbgBreakLines].sort((a,b)=>a-b))
-    html += `<span class="bp-chip" onclick="monToggleBp(${ln})" title="Remove">● ${ln} ✕</span>`;
+  let addr = dbgDisasmBase;
+  for (let i = 0; i < 24; i++) {
+    const { mnem, ops, size } = disassemble(addr);
+    const isCur = addr === cpu.PC;
+    const isBp  = dbgBreakpoints.has(addr);
+    let byteStr = '';
+    for (let b = 0; b < Math.min(size, 4); b++) byteStr += h2(cpuMem.read((addr+b)&0xFFFF)) + ' ';
+
+    const cls = (isCur ? ' current' : '') + (isBp ? ' bp-line' : '');
+    const captureAddr = addr;
+    html += `<div class="disasm-line${cls}" onclick="dbgToggleBp(${captureAddr})" title="Click to toggle breakpoint">` +
+            `<span class="dasm-addr">${h4(addr)}</span>` +
+            `<span class="dasm-bytes">${byteStr.trim()}</span>` +
+            `<span class="dasm-mnem">${mnem}</span>` +
+            `<span class="dasm-ops">${ops}</span>` +
+            `</div>`;
+    addr = (addr + size) & 0xFFFF;
+  }
+  el.innerHTML = html;
+
+  // Update addr input
+  const inp = document.getElementById('dasmAddr');
+  if (inp) inp.value = h4(dbgDisasmBase);
+}
+
+// ── Breakpoint management ─────────────────────────────────────────────────
+function dbgToggleBp(addr) {
+  if (dbgBreakpoints.has(addr)) dbgBreakpoints.delete(addr);
+  else dbgBreakpoints.add(addr);
+  dbgRefreshBpList();
+  dbgDisasmAt(dbgDisasmBase);
+  dbgUpdateMem(document.getElementById('memDump')._base || 0);
+}
+
+function dbgClearBps() {
+  dbgBreakpoints.clear();
+  dbgRefreshBpList();
+  dbgDisasmAt(dbgDisasmBase);
+}
+
+function dbgRefreshBpList() {
+  const el = document.getElementById('bpList');
+  if (!el) return;
+  if (dbgBreakpoints.size === 0) { el.innerHTML = '<span style="font-size:9px;color:#224">No breakpoints</span>'; return; }
+  let html = '';
+  for (const addr of [...dbgBreakpoints].sort((a,b)=>a-b)) {
+    html += `<span class="bp-chip" onclick="dbgToggleBp(${addr})" title="Click to remove">` +
+            `● ${h4(addr)} ✕</span>`;
+  }
   el.innerHTML = html;
 }
 
-// ── Step one BASIC line ──────────────────────────────────────────────────
-function monStep() {
-  const b = window.basic;
-  if (!b || !b.program.length) { addOut('No program loaded.', true, 'sys'); return; }
-  if (b.running) return;
-
-  // Clamp lineIndex
-  if (b.lineIndex < 0 || b.lineIndex >= b.program.length) b.lineIndex = 0;
-  const line = b.program[b.lineIndex];
-  addOut(`STEP ${line.lineNum}: ${line.src}`, true, 'sys');
-
-  b.running = true;
-  b._jumped = false;
-  b.executeLine(line.src).then(() => {
-    if (!b._jumped) b.lineIndex++;
-    b.running = false;
-    dbgRefresh();
-  }).catch(e => {
-    addOut(`Error: ${e.message}`, true, 'sys');
-    b.running = false;
-    dbgRefresh();
-  });
+// ── Step / Run / Reset ────────────────────────────────────────────────────
+function dbgStep() {
+  if (cpu.halted) { addOut('CPU HALTED — use RST to reset', true, 'sys'); return; }
+  cpu.step();
+  dbgRefresh();
+  dbgDisasmAt(cpu.PC);
 }
 
-// ── Run until breakpoint (or stop) ───────────────────────────────────────
-function monRunTo() {
-  const b = window.basic;
-  if (!b || !b.program.length) { addOut('No program loaded.', true, 'sys'); return; }
-  if (b.running) return;
-  runProg();   // uses the normal run path, breakpoints checked in the interval below
-}
-
-// ── Polling interval — hooked AFTER basic is created ─────────────────────
-function _startMonitorPolling() {
-  // Poll at 200 ms for live updates
-  setInterval(() => {
+function dbgRun() {
+  if (dbgRunning) {
+    // Pause
+    dbgRunning = false;
+    clearInterval(dbgRunTimer);
+    dbgRunTimer = null;
+    document.getElementById('dbgRun').textContent = 'RUN';
+    document.getElementById('dbgRun').classList.remove('active');
     dbgRefresh();
-    // Breakpoint check
-    const b = window.basic;
-    if (b && b.running && b.program && b.program[b.lineIndex]) {
-      const ln = b.program[b.lineIndex].lineNum;
-      if (_dbgBreakLines.has(ln)) {
-        b.stop();
-        addOut(`⬛ Breakpoint @ line ${ln}`, true, 'sys');
-      }
-    }
-  }, 200);
-}
-
-// Wait until basic exists (created in the other load handler)
-function _waitForBasic() {
-  if (window.basic) {
-    _startMonitorPolling();
-    dbgRefresh();
-    monUpdateBpList();
+    dbgDisasmAt(cpu.PC);
   } else {
-    setTimeout(_waitForBasic, 100);
+    // Run
+    if (cpu.halted) { addOut('CPU HALTED — RST to reset', true, 'sys'); return; }
+    dbgRunning = true;
+    document.getElementById('dbgRun').textContent = 'PAUSE';
+    document.getElementById('dbgRun').classList.add('active');
+    dbgRunTimer = setInterval(() => {
+      // Run ~1000 cycles per tick
+      for (let i = 0; i < 100 && !cpu.halted; i++) {
+        cpu.step();
+        if (dbgBreakpoints.has(cpu.PC)) {
+          dbgRunning = false;
+          clearInterval(dbgRunTimer);
+          dbgRunTimer = null;
+          document.getElementById('dbgRun').textContent = 'RUN';
+          document.getElementById('dbgRun').classList.remove('active');
+          addOut(`Breakpoint hit @ ${h4(cpu.PC)}`, true, 'sys');
+          dbgRefresh();
+          dbgDisasmAt(cpu.PC);
+          return;
+        }
+      }
+      if (cpu.halted) {
+        dbgRunning = false;
+        clearInterval(dbgRunTimer);
+        dbgRunTimer = null;
+        document.getElementById('dbgRun').textContent = 'RUN';
+        document.getElementById('dbgRun').classList.remove('active');
+        addOut('CPU HALTED', true, 'sys');
+        dbgRefresh();
+        return;
+      }
+      // Update display every tick
+      dbgUpdateRegs();
+    }, 50);
   }
 }
 
-window.addEventListener('load', _waitForBasic);
+function dbgReset() {
+  if (dbgRunning) {
+    clearInterval(dbgRunTimer);
+    dbgRunning = false;
+    document.getElementById('dbgRun').textContent = 'RUN';
+    document.getElementById('dbgRun').classList.remove('active');
+  }
+  cpu.reset();
+  dbgRefresh();
+  dbgDisasmAt(0);
+  addOut('CPU reset.', true, 'sys');
+}
+
+function dbgFillZero() {
+  cpu.iram.fill(0);
+  dbgUpdateIram();
+}
+
+function dbgEditIram(addr) {
+  const cur = h2(cpu.iram[addr]);
+  const val = prompt(`iRAM[${h2(addr)}] = ${cur}h\nNew value (hex):`, cur);
+  if (val !== null) {
+    const n = parseInt(val, 16);
+    if (!isNaN(n)) { cpu.iram[addr] = n & 0xFF; dbgUpdateIram(); dbgUpdateRegs(); }
+  }
+}
+
+function dbgMemGo() {
+  const inp = document.getElementById('memAddr');
+  const addr = parseInt(inp.value, 16) || 0;
+  dbgUpdateMem(addr);
+}
+
+function dbgRefresh() {
+  dbgUpdateRegs();
+  dbgUpdateIram();
+  dbgUpdateMem(document.getElementById('memDump')._base || 0);
+}
+
+// ── Auto-refresh when BASIC runs ──────────────────────────────────────────
+// Patch basic.onPrint to also refresh CPU monitor
+const _origBasicOnPrint_cpu = null; // placeholder patched below
+let _cpuRefreshInterval = null;
+
+function startCpuRefreshDuringRun() {
+  if (_cpuRefreshInterval) return;
+  _cpuRefreshInterval = setInterval(() => {
+    if (basic && basic.running) dbgUpdateRegs();
+    else { clearInterval(_cpuRefreshInterval); _cpuRefreshInterval = null; dbgRefresh(); }
+  }, 200);
+}
+
+// ── Init on load ──────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  // Give the main load handler a moment to run first
+  setTimeout(() => {
+    dbgRefresh();
+    dbgDisasmAt(0);
+    dbgRefreshBpList();
+    // Patch runProg to start cpu refresh
+    const _origRunProg = window.runProg;
+    // Wrap basic.run to refresh monitor
+    if (basic) {
+      const _origRun = basic.run.bind(basic);
+      basic.run = async function(...a) {
+        startCpuRefreshDuringRun();
+        await _origRun(...a);
+        dbgRefresh();
+        dbgDisasmAt(cpu.PC);
+      };
+    }
+  }, 300);
+});
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
